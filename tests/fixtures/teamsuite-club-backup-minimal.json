@@ -1,0 +1,201 @@
+{
+  "exportedAt": "2026-09-13T00:26:00",
+  "scope": "club",
+  "sourceClubId": "club-legacy-001",
+  "clubs": [
+    {
+      "id": "club-legacy-001",
+      "name": "Α.Σ. Απόλλων Πατρών",
+      "slug": "apollon-patron",
+      "athleteLicenseLimit": 1000,
+      "smtp": { "host": "smtp.example.com", "password": "" },
+      "sms": { "apiKey": "********" },
+      "viva": { "clientSecret": "" }
+    }
+  ],
+  "users": [
+    {
+      "id": "user-1",
+      "name": "Γραμματεία",
+      "email": "secretariat@example.com",
+      "clubId": "club-legacy-001",
+      "role": "secretariat",
+      "password": ""
+    },
+    {
+      "id": "user-parent-1",
+      "fullName": "Γονέας Δημητρίου",
+      "email": "parent.dimitriou@example.com",
+      "clubId": "club-legacy-001",
+      "role": "parent",
+      "password": "",
+      "active": true
+    }
+  ],
+  "appDataByClub": {
+    "club-legacy-001": {
+      "students": [
+        {
+          "id": "a1",
+          "firstName": "Νίκος",
+          "lastName": "Δημητρίου",
+          "email": "nikos@example.com",
+          "status": "active",
+          "classId": "cl1",
+          "classIds": ["cl1"],
+          "fatherEmail": "father.dimitriou@example.com",
+          "motherEmail": "mother.dimitriou@example.com",
+          "preferredParentEmail": "both",
+          "fatherFirstName": "Γιώργος",
+          "motherFirstName": "Ελένη"
+        },
+        { "id": "a2", "firstName": "Μαρία", "lastName": "Παπαδοπούλου", "status": "trial", "classId": "cl1", "classIds": ["cl1"], "preferredParentEmail": "mother", "motherEmail": "maria.mom@example.com" }
+      ],
+      "coaches": [{ "id": "c1" }],
+      "classes": [{ "id": "cl1", "name": "U12", "sport": "Μπάσκετ" }],
+      "schedule": [
+        {
+          "id": "sch1",
+          "classId": "cl1",
+          "dayOfWeek": 1,
+          "startTime": "18:00",
+          "endTime": "19:30",
+          "location": "Κλειστό Α"
+        }
+      ],
+      "attendance": [
+        {
+          "id": "att1",
+          "classId": "cl1",
+          "studentId": "a1",
+          "date": "2026-09-10",
+          "present": true
+        },
+        {
+          "id": "att2",
+          "classId": "cl1",
+          "studentId": "a2",
+          "date": "2026-09-10",
+          "present": false,
+          "absenceReason": "sick"
+        }
+      ],
+      "revenues": [],
+      "expenses": [],
+      "transactions": [
+        {
+          "id": "t1",
+          "type": "payment",
+          "amount": 40,
+          "athleteId": "a1",
+          "receiptNumber": "Γ 1"
+        }
+      ],
+      "receiptNumberRanges": [
+        { "id": "rrp1", "series": "Γ", "from": 1, "to": 50 },
+        { "id": "rrp2", "series": "Γ", "from": 51, "to": 100 }
+      ],
+      "receiptNextBySeries": { "Γ": 44 },
+      "receiptIssues": [
+        {
+          "id": "ris1",
+          "series": "Γ",
+          "number": 1,
+          "transactionId": "t1",
+          "athleteId": "a1",
+          "issuedAt": "2026-09-14T16:19:07+03:00",
+          "emailedAt": "2026-09-14T16:20:00+03:00",
+          "voidedAt": null,
+          "voidReason": null,
+          "amount": 40,
+          "receivedFrom": "ΔΗΜΗΤΡΙΟΥ ΝΙΚΟΣ",
+          "reason": "ΕΓΓΡΑΦΗ",
+          "kind": "subscription"
+        },
+        {
+          "id": "ris2",
+          "series": "Γ",
+          "number": 43,
+          "transactionId": null,
+          "athleteId": "a2",
+          "issuedAt": "2026-09-16T12:48:29+03:00",
+          "emailedAt": null,
+          "voidedAt": "2026-09-16T12:48:53+03:00",
+          "voidReason": "Διαγραφή",
+          "amount": 105,
+          "receivedFrom": "ΠΑΠΑΔΟΠΟΥΛΟΥ ΜΑΡΙΑ",
+          "reason": "ΣΥΝΔΡΟΜΗ",
+          "kind": "subscription"
+        }
+      ],
+      "trainings": [
+        {
+          "id": "tr1",
+          "date": "2026-09-10",
+          "startTime": "18:00",
+          "endTime": "19:30",
+          "location": "Κλειστό Α",
+          "notes": "Τεχνική",
+          "classId": "cl1"
+        },
+        {
+          "id": "tr2",
+          "date": "2026-09-12",
+          "startTime": "17:00",
+          "endTime": "18:30",
+          "location": "Γήπεδο Β",
+          "notes": "",
+          "classId": "cl1"
+        }
+      ],
+      "staff": [],
+      "clubMembers": [{ "id": "m1" }, { "id": "m2" }, { "id": "m3" }],
+      "associations": [],
+      "facilities": [],
+      "sports": [],
+      "announcements": [
+        {
+          "id": "ann1",
+          "title": "Νέος τρόπος ενημέρωσης για τους αγώνες",
+          "message": "Αγαπητοί γονείς, ενημερώνουμε για τις συνθέσεις των τμημάτων.",
+          "createdAt": "2026-10-16T18:27:00",
+          "createdBy": "ΑΚΑΔΗΜΙΑ ΑΠΟΛΛΩΝ ΠΑΤΡΩΝ",
+          "status": "published",
+          "audienceRoles": ["parents", "coaches", "athletes", "staff"],
+          "classIds": ["cl1"],
+          "emailStats": {
+            "sentCount": 34,
+            "failedCount": 2,
+            "recipients": [
+              { "email": "ok@example.com", "status": "sent" },
+              { "email": "bad@example.com", "status": "failed", "error": "bounce" }
+            ]
+          },
+          "imageUrl": "https://example.com/announcement.jpg"
+        }
+      ],
+      "budgets": [],
+      "products": [],
+      "stockMovements": [],
+      "partnerBusinesses": [],
+      "partnerOffers": [],
+      "feeChargeTemplates": [],
+      "feeReminderLogs": [],
+      "photos": [],
+      "parentLinks": [
+        {
+          "id": "plink1",
+          "parentUserId": "user-parent-1",
+          "athleteId": "a1"
+        }
+      ],
+      "progressReports": [],
+      "registrationApplications": [],
+      "sizeChart": {
+        "kids": ["XS", "S", "M", "L", "XL"],
+        "men": [],
+        "women": []
+      }
+    }
+  }
+}

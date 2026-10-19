@@ -1,0 +1,875 @@
+<?php
+
+namespace App\Support;
+
+use App\Models\AcademyClass;
+use App\Models\Announcement;
+use App\Models\Association;
+use App\Models\Athlete;
+use App\Models\AthleteTransaction;
+use App\Models\Attendance;
+use App\Models\ClubMember;
+use App\Models\Coach;
+use App\Models\DocumentProtocolEntry;
+use App\Models\FeeChargeTemplate;
+use App\Models\GalleryPhoto;
+use App\Models\ParentAthleteLink;
+use App\Models\PartnerBusiness;
+use App\Models\RentalBooking;
+use App\Models\ScheduleSlot;
+use App\Models\Sport;
+use App\Models\SportMatch;
+use App\Models\StaffMember;
+use App\Models\Training;
+use App\Models\WarehouseProduct;
+
+final class AdminClubResources
+{
+    /**
+     * @return array<string, array{
+     *     model: class-string,
+     *     title: string,
+     *     page: string,
+     *     route: string,
+     *     columns: list<array{key: string, label: string}>,
+     *     fields: list<array{name: string, label: string, type?: string, required?: bool}>,
+     *     rules: array<string, string|list<string>>,
+     *     search?: list<string>,
+     *     status_field?: string,
+     *     filter_options?: array{status?: list<array{value: string, label: string}>}
+     * }>
+     */
+    public static function definitions(): array
+    {
+        $activeInactive = [
+            ['value' => '1', 'label' => 'Ενεργοί'],
+            ['value' => '0', 'label' => 'Ανενεργοί'],
+        ];
+
+        return [
+            'athletes' => [
+                'model' => Athlete::class,
+                'title' => 'Αθλητές',
+                'page' => 'Admin/Athletes/Index',
+                'route' => 'admin.athletes',
+                'search' => ['first_name', 'last_name', 'email', 'phone', 'guardian_name'],
+                'status_field' => 'status',
+                'filter_options' => [
+                    'status' => [
+                        ['value' => 'active', 'label' => 'Ενεργοί'],
+                        ['value' => 'trial', 'label' => 'Δοκιμή'],
+                        ['value' => 'inactive', 'label' => 'Ανενεργοί'],
+                    ],
+                ],
+                'columns' => [
+                    ['key' => 'first_name', 'label' => 'Όνομα'],
+                    ['key' => 'last_name', 'label' => 'Επώνυμο'],
+                    ['key' => 'email', 'label' => 'Email'],
+                    ['key' => 'phone', 'label' => 'Τηλέφωνο'],
+                    ['key' => 'status', 'label' => 'Κατάσταση'],
+                ],
+                'fields' => [
+                    ['name' => 'first_name', 'label' => 'Όνομα', 'type' => 'text', 'required' => true],
+                    ['name' => 'last_name', 'label' => 'Επώνυμο', 'type' => 'text', 'required' => true],
+                    ['name' => 'email', 'label' => 'Email', 'type' => 'email'],
+                    ['name' => 'phone', 'label' => 'Τηλέφωνο', 'type' => 'text'],
+                    [
+                        'name' => 'status',
+                        'label' => 'Κατάσταση',
+                        'type' => 'select',
+                        'required' => true,
+                        'options' => [
+                            ['value' => 'active', 'label' => 'Ενεργός'],
+                            ['value' => 'inactive', 'label' => 'Ανενεργός'],
+                            ['value' => 'trial', 'label' => 'Δοκιμαστικός'],
+                        ],
+                    ],
+                    ['name' => 'monthly_fee', 'label' => 'Μηνιαία (€)', 'type' => 'number'],
+                    ['name' => 'sport', 'label' => 'Άθλημα', 'type' => 'text'],
+                ],
+                'rules' => [
+                    'first_name' => 'required|string|max:120',
+                    'last_name' => 'required|string|max:120',
+                    'email' => 'nullable|email|max:190',
+                    'phone' => 'nullable|string|max:40',
+                    'status' => 'required|in:active,inactive,trial',
+                    'monthly_fee' => 'nullable|numeric|min:0',
+                    'sport' => 'nullable|string|max:120',
+                ],
+            ],
+            'parents' => [
+                'model' => ParentAthleteLink::class,
+                'title' => 'Γονείς / Σύνδεση αθλητή',
+                'page' => 'Admin/Parents/Index',
+                'route' => 'admin.parents',
+                'search' => ['relation'],
+                'columns' => [
+                    ['key' => 'athlete_id', 'label' => 'Αθλητής (ID)'],
+                    ['key' => 'relation', 'label' => 'Σχέση'],
+                    ['key' => 'receives_push', 'label' => 'Push'],
+                    ['key' => 'receives_sms', 'label' => 'SMS'],
+                ],
+                'fields' => [
+                    ['name' => 'athlete_id', 'label' => 'ID αθλητή', 'type' => 'text', 'required' => true],
+                    ['name' => 'relation', 'label' => 'Σχέση', 'type' => 'text'],
+                    ['name' => 'receives_push', 'label' => 'Push ειδοποιήσεις', 'type' => 'checkbox'],
+                    ['name' => 'receives_sms', 'label' => 'SMS', 'type' => 'checkbox'],
+                ],
+                'rules' => [
+                    'athlete_id' => 'required|uuid',
+                    'relation' => 'nullable|string|max:80',
+                    'receives_push' => 'boolean',
+                    'receives_sms' => 'boolean',
+                ],
+            ],
+            'coaches' => [
+                'model' => Coach::class,
+                'title' => 'Προπονητές',
+                'subtitle' => 'Διαχείριση προπονητών συλλόγου',
+                'create_label' => 'Νέος προπονητής',
+                'page' => 'Admin/Coaches/Index',
+                'route' => 'admin.coaches',
+                'search' => ['first_name', 'last_name', 'email', 'phone', 'sport', 'gga_code'],
+                'status_field' => 'is_active',
+                'filter_options' => ['status' => $activeInactive],
+                'filter_label' => 'Κατάσταση',
+                'empty_message' => 'Πάτα «Νέος προπονητής» για να προσθέσεις τον πρώτο.',
+                'columns' => [
+                    ['key' => 'last_name', 'label' => 'Επώνυμο'],
+                    ['key' => 'first_name', 'label' => 'Όνομα'],
+                    ['key' => 'sport', 'label' => 'Άθλημα'],
+                    ['key' => 'gga_code', 'label' => 'Κωδικός Γ.Γ.Α'],
+                    ['key' => 'license_level', 'label' => 'Άδεια'],
+                    ['key' => 'first_aid', 'label' => 'Πρώτες βοήθειες'],
+                    ['key' => 'email', 'label' => 'Email'],
+                    ['key' => 'phone', 'label' => 'Τηλέφωνο'],
+                    ['key' => 'is_active', 'label' => 'Κατάσταση'],
+                ],
+                'fields' => [
+                    ['name' => 'last_name', 'label' => 'Επώνυμο', 'type' => 'text', 'required' => true],
+                    ['name' => 'first_name', 'label' => 'Όνομα', 'type' => 'text', 'required' => true],
+                    ['name' => 'email', 'label' => 'Email', 'type' => 'email'],
+                    ['name' => 'phone', 'label' => 'Τηλέφωνο', 'type' => 'text'],
+                    ['name' => 'sport', 'label' => 'Άθλημα', 'type' => 'text'],
+                    ['name' => 'gga_code', 'label' => 'Κωδικός Γ.Γ.Α', 'type' => 'text'],
+                    ['name' => 'hire_date', 'label' => 'Πρόσληψη', 'type' => 'date'],
+                    ['name' => 'license_level', 'label' => 'Άδεια (επίπεδο)', 'type' => 'text'],
+                    ['name' => 'is_active', 'label' => 'Ενεργός', 'type' => 'checkbox'],
+                ],
+                'rules' => [
+                    'first_name' => 'required|string|max:120',
+                    'last_name' => 'required|string|max:120',
+                    'email' => 'nullable|email|max:190',
+                    'phone' => 'nullable|string|max:40',
+                    'sport' => 'nullable|string|max:80',
+                    'gga_code' => 'nullable|string|max:80',
+                    'hire_date' => 'nullable|date',
+                    'license_level' => 'nullable|string|max:120',
+                    'is_active' => 'boolean',
+                ],
+            ],
+            'staff' => [
+                'model' => StaffMember::class,
+                'title' => 'Προσωπικό',
+                'subtitle' => 'Διαχείριση προσωπικού συλλόγου',
+                'create_label' => 'Νέο μέλος',
+                'page' => 'Admin/Staff/Index',
+                'route' => 'admin.staff',
+                'search' => ['first_name', 'last_name', 'email', 'phone', 'role_title'],
+                'status_field' => 'is_active',
+                'filter_options' => ['status' => $activeInactive],
+                'filter_label' => 'Κατάσταση',
+                'empty_message' => 'Δεν βρέθηκαν μέλη προσωπικού.',
+                'columns' => [
+                    ['key' => 'last_name', 'label' => 'Επώνυμο'],
+                    ['key' => 'first_name', 'label' => 'Όνομα'],
+                    ['key' => 'role_title', 'label' => 'Ρόλος'],
+                    ['key' => 'phone', 'label' => 'Τηλέφωνο'],
+                    ['key' => 'email', 'label' => 'Email'],
+                    ['key' => 'is_active', 'label' => 'Κατάσταση'],
+                ],
+                'fields' => [
+                    ['name' => 'first_name', 'label' => 'Όνομα', 'type' => 'text', 'required' => true],
+                    ['name' => 'last_name', 'label' => 'Επώνυμο', 'type' => 'text', 'required' => true],
+                    ['name' => 'role_title', 'label' => 'Ρόλος', 'type' => 'text'],
+                    ['name' => 'email', 'label' => 'Email', 'type' => 'email'],
+                    ['name' => 'phone', 'label' => 'Τηλέφωνο', 'type' => 'text'],
+                    ['name' => 'is_active', 'label' => 'Ενεργός', 'type' => 'checkbox'],
+                ],
+                'rules' => [
+                    'first_name' => 'required|string|max:120',
+                    'last_name' => 'required|string|max:120',
+                    'role_title' => 'nullable|string|max:120',
+                    'email' => 'nullable|email|max:190',
+                    'phone' => 'nullable|string|max:40',
+                    'is_active' => 'boolean',
+                ],
+            ],
+            'members' => [
+                'model' => ClubMember::class,
+                'title' => 'Μέλη',
+                'subtitle' => 'Μητρώο μελών συλλόγου (όχι αθλητές).',
+                'create_label' => 'Νέο μέλος',
+                'page' => 'Admin/Members/Index',
+                'route' => 'admin.members',
+                'search' => ['first_name', 'last_name', 'email', 'phone', 'member_number'],
+                'status_field' => 'status',
+                'empty_message' => 'Δεν υπάρχουν μέλη. Προσθέστε το πρώτο μέλος του συλλόγου.',
+                'columns' => [
+                    ['key' => 'last_name', 'label' => 'Επώνυμο'],
+                    ['key' => 'first_name', 'label' => 'Όνομα'],
+                    ['key' => 'address', 'label' => 'Διεύθυνση'],
+                    ['key' => 'postal_code', 'label' => 'ΤΚ'],
+                    ['key' => 'city', 'label' => 'Πόλη'],
+                    ['key' => 'prefecture', 'label' => 'Νομός'],
+                    ['key' => 'email', 'label' => 'Email'],
+                    ['key' => 'phone', 'label' => 'Τηλέφωνο'],
+                ],
+                'fields' => [
+                    ['name' => 'last_name', 'label' => 'Επώνυμο', 'type' => 'text', 'required' => true],
+                    ['name' => 'first_name', 'label' => 'Όνομα', 'type' => 'text', 'required' => true],
+                    ['name' => 'address', 'label' => 'Διεύθυνση', 'type' => 'text'],
+                    ['name' => 'postal_code', 'label' => 'ΤΚ', 'type' => 'text'],
+                    ['name' => 'city', 'label' => 'Πόλη', 'type' => 'text'],
+                    ['name' => 'prefecture', 'label' => 'Νομός', 'type' => 'text'],
+                    ['name' => 'email', 'label' => 'Email', 'type' => 'email'],
+                    ['name' => 'phone', 'label' => 'Τηλέφωνο', 'type' => 'text'],
+                    [
+                        'name' => 'status',
+                        'label' => 'Κατάσταση',
+                        'type' => 'select',
+                        'options' => [
+                            ['value' => 'active', 'label' => 'Ενεργό'],
+                            ['value' => 'inactive', 'label' => 'Ανενεργό'],
+                        ],
+                    ],
+                ],
+                'rules' => [
+                    'first_name' => 'required|string|max:120',
+                    'last_name' => 'required|string|max:120',
+                    'email' => 'nullable|email|max:190',
+                    'phone' => 'nullable|string|max:40',
+                    'address' => 'nullable|string|max:255',
+                    'postal_code' => 'nullable|string|max:20',
+                    'city' => 'nullable|string|max:120',
+                    'prefecture' => 'nullable|string|max:120',
+                    'member_number' => 'nullable|string|max:40',
+                    'status' => 'nullable|in:active,inactive',
+                ],
+            ],
+            'classes' => [
+                'model' => AcademyClass::class,
+                'title' => 'Τμήματα',
+                'page' => 'Admin/Classes/Index',
+                'route' => 'admin.classes',
+                'search' => ['name', 'sport', 'age_group'],
+                'columns' => [
+                    ['key' => 'name', 'label' => 'Όνομα'],
+                    ['key' => 'sport', 'label' => 'Άθλημα'],
+                    ['key' => 'age_group', 'label' => 'Ηλικιακή ομάδα'],
+                    ['key' => 'monthly_fee', 'label' => 'Μηνιαία χρέωση'],
+                ],
+                'fields' => [
+                    ['name' => 'name', 'label' => 'Όνομα τμήματος', 'type' => 'text', 'required' => true],
+                    ['name' => 'sport', 'label' => 'Άθλημα', 'type' => 'text'],
+                    ['name' => 'age_group', 'label' => 'Ηλικιακή ομάδα', 'type' => 'text'],
+                    ['name' => 'monthly_fee', 'label' => 'Μηνιαία χρέωση (€)', 'type' => 'number'],
+                ],
+                'rules' => [
+                    'name' => 'required|string|max:160',
+                    'sport' => 'nullable|string|max:80',
+                    'age_group' => 'nullable|string|max:80',
+                    'monthly_fee' => 'nullable|numeric|min:0',
+                ],
+            ],
+            'trainings' => [
+                'model' => Training::class,
+                'title' => 'Προπονήσεις',
+                'subtitle' => 'Καταχώρηση και διαχείριση προπονήσεων της ακαδημίας.',
+                'page' => 'Admin/Trainings/Index',
+                'route' => 'admin.trainings',
+                'create_label' => '+ Νέα προπόνηση',
+                'empty_message' => 'Πάτα «+ Νέα προπόνηση» για να προσθέσεις την πρώτη.',
+                'search' => ['title', 'status', 'notes'],
+                'status_field' => 'status',
+                'filter_options' => [
+                    'status' => [
+                        ['value' => 'scheduled', 'label' => 'Προγραμματισμένη'],
+                        ['value' => 'done', 'label' => 'Ολοκληρωμένη'],
+                        ['value' => 'cancelled', 'label' => 'Ακυρωμένη'],
+                    ],
+                ],
+                'columns' => [
+                    ['key' => 'date_label', 'label' => 'Ημερομηνία'],
+                    ['key' => 'start_time', 'label' => 'Έναρξη'],
+                    ['key' => 'end_time', 'label' => 'Λήξη'],
+                    ['key' => 'location', 'label' => 'Τοποθεσία'],
+                    ['key' => 'sport', 'label' => 'Άθλημα'],
+                    ['key' => 'class_name', 'label' => 'Τμήμα'],
+                    ['key' => 'notes', 'label' => 'Σημειώσεις'],
+                ],
+                'fields' => [
+                    ['name' => 'starts_at', 'label' => 'Ημερομηνία · Ώρα έναρξης', 'type' => 'datetime-local', 'required' => true],
+                    ['name' => 'ends_at', 'label' => 'Ώρα λήξης', 'type' => 'datetime-local'],
+                    ['name' => 'title', 'label' => 'Τοποθεσία / Γήπεδο', 'type' => 'text'],
+                    ['name' => 'notes', 'label' => 'Σημειώσεις', 'type' => 'textarea'],
+                    [
+                        'name' => 'status',
+                        'label' => 'Κατάσταση',
+                        'type' => 'select',
+                        'options' => [
+                            ['value' => 'scheduled', 'label' => 'Προγραμματισμένη'],
+                            ['value' => 'done', 'label' => 'Ολοκληρωμένη'],
+                            ['value' => 'cancelled', 'label' => 'Ακυρωμένη'],
+                        ],
+                    ],
+                ],
+                'rules' => [
+                    'title' => 'nullable|string|max:160',
+                    'starts_at' => 'required|date',
+                    'ends_at' => 'nullable|date|after_or_equal:starts_at',
+                    'notes' => 'nullable|string|max:2000',
+                    'status' => 'nullable|in:scheduled,done,cancelled',
+                ],
+                'toolbar' => ['recurring', 'remind_tomorrow', 'bulk', 'create'],
+            ],
+            'matches' => [
+                'model' => SportMatch::class,
+                'title' => 'Αγώνες',
+                'subtitle' => 'Προγραμματισμός αγώνων, φύλλο αποτελέσματος και σκορ.',
+                'page' => 'Admin/Matches/Index',
+                'route' => 'admin.matches',
+                'create_label' => '+ Καταχώρηση',
+                'empty_message' => 'Δεν υπάρχουν αγώνες ακόμη.',
+                'search' => ['opponent', 'venue', 'status'],
+                'status_field' => 'status',
+                'filter_options' => [
+                    'status' => [
+                        ['value' => 'scheduled', 'label' => 'Προγραμματισμένος'],
+                        ['value' => 'played', 'label' => 'Ολοκληρώθηκε'],
+                        ['value' => 'cancelled', 'label' => 'Ακυρωμένος'],
+                        ['value' => 'postponed', 'label' => 'Αναβληθείς'],
+                    ],
+                ],
+                'columns' => [
+                    ['key' => 'date_label', 'label' => 'Ημερομηνία'],
+                    ['key' => 'class_name', 'label' => 'Τμήμα'],
+                    ['key' => 'opponent', 'label' => 'Αντίπαλος'],
+                    ['key' => 'home_away_label', 'label' => 'Έδρα'],
+                    ['key' => 'status_label', 'label' => 'Κατάσταση'],
+                    ['key' => 'score', 'label' => 'Σκορ'],
+                ],
+                'fields' => [
+                    ['name' => 'starts_at', 'label' => 'Ημερομηνία', 'type' => 'datetime-local', 'required' => true],
+                    ['name' => 'opponent', 'label' => 'Αντίπαλος', 'type' => 'text', 'required' => true],
+                    [
+                        'name' => 'home_away',
+                        'label' => 'Έδρα',
+                        'type' => 'select',
+                        'default' => 'home',
+                        'options' => [
+                            ['value' => 'home', 'label' => 'Εντός'],
+                            ['value' => 'away', 'label' => 'Εκτός'],
+                            ['value' => 'neutral', 'label' => 'Ουδέτερο'],
+                        ],
+                    ],
+                    ['name' => 'venue', 'label' => 'Γήπεδο / Χώρος', 'type' => 'text'],
+                    [
+                        'name' => 'status',
+                        'label' => 'Κατάσταση',
+                        'type' => 'select',
+                        'default' => 'scheduled',
+                        'options' => [
+                            ['value' => 'scheduled', 'label' => 'Προγραμματισμένος'],
+                            ['value' => 'played', 'label' => 'Ολοκληρώθηκε'],
+                            ['value' => 'cancelled', 'label' => 'Ακυρωμένος'],
+                            ['value' => 'postponed', 'label' => 'Αναβληθείς'],
+                        ],
+                    ],
+                    ['name' => 'score_for', 'label' => 'Σκορ μας', 'type' => 'number'],
+                    ['name' => 'score_against', 'label' => 'Σκορ αντιπάλου', 'type' => 'number'],
+                    ['name' => 'notes', 'label' => 'Σημειώσεις / φύλλο αγώνα', 'type' => 'textarea'],
+                ],
+                'rules' => [
+                    'opponent' => 'required|string|max:160',
+                    'starts_at' => 'required|date',
+                    'venue' => 'nullable|string|max:160',
+                    'home_away' => 'nullable|in:home,away,neutral',
+                    'score_for' => 'nullable|integer|min:0|max:999',
+                    'score_against' => 'nullable|integer|min:0|max:999',
+                    'status' => 'nullable|in:scheduled,played,cancelled,postponed',
+                    'notes' => 'nullable|string|max:5000',
+                ],
+            ],
+            'schedule' => [
+                'model' => ScheduleSlot::class,
+                'title' => 'Πρόγραμμα',
+                'subtitle' => null,
+                'page' => 'Admin/Schedule/Index',
+                'route' => 'admin.schedule',
+                'create_label' => '+ Νέα Ώρα',
+                'empty_message' => 'Δεν υπάρχουν ώρες στο πρόγραμμα.',
+                'search' => ['title'],
+                'status_field' => 'weekday',
+                'filter_label' => 'Ημέρα',
+                'filter_options' => [
+                    'status' => [
+                        ['value' => '1', 'label' => 'Δευτέρα'],
+                        ['value' => '2', 'label' => 'Τρίτη'],
+                        ['value' => '3', 'label' => 'Τετάρτη'],
+                        ['value' => '4', 'label' => 'Πέμπτη'],
+                        ['value' => '5', 'label' => 'Παρασκευή'],
+                        ['value' => '6', 'label' => 'Σάββατο'],
+                        ['value' => '0', 'label' => 'Κυριακή'],
+                    ],
+                ],
+                'columns' => [
+                    ['key' => 'title', 'label' => 'Τμήμα'],
+                    ['key' => 'weekday', 'label' => 'Ημέρα'],
+                    ['key' => 'starts_at', 'label' => 'Έναρξη'],
+                    ['key' => 'ends_at', 'label' => 'Λήξη'],
+                ],
+                'fields' => [
+                    ['name' => 'title', 'label' => 'Τμήμα', 'type' => 'text', 'required' => true],
+                    [
+                        'name' => 'weekday',
+                        'label' => 'Ημέρα',
+                        'type' => 'select',
+                        'options' => [
+                            ['value' => '1', 'label' => 'Δευτέρα'],
+                            ['value' => '2', 'label' => 'Τρίτη'],
+                            ['value' => '3', 'label' => 'Τετάρτη'],
+                            ['value' => '4', 'label' => 'Πέμπτη'],
+                            ['value' => '5', 'label' => 'Παρασκευή'],
+                            ['value' => '6', 'label' => 'Σάββατο'],
+                            ['value' => '0', 'label' => 'Κυριακή'],
+                        ],
+                    ],
+                    ['name' => 'starts_at', 'label' => 'Έναρξη', 'type' => 'text', 'placeholder' => '18:00'],
+                    ['name' => 'ends_at', 'label' => 'Λήξη', 'type' => 'text', 'placeholder' => '19:30'],
+                ],
+                'rules' => [
+                    'title' => 'required|string|max:160',
+                    'weekday' => 'nullable|integer|min:0|max:6',
+                    'starts_at' => 'nullable|string|max:20',
+                    'ends_at' => 'nullable|string|max:20',
+                ],
+                'toolbar' => ['week', 'today', 'from_schedule', 'new_slot'],
+            ],
+            'attendance' => [
+                'model' => Attendance::class,
+                'title' => 'Παρουσίες',
+                'page' => 'Admin/Attendance/Index',
+                'route' => 'admin.attendance',
+                'search' => ['athlete_id', 'training_id'],
+                'status_field' => 'status',
+                'filter_options' => [
+                    'status' => [
+                        ['value' => 'present', 'label' => 'Παρόν'],
+                        ['value' => 'absent', 'label' => 'Απών'],
+                        ['value' => 'excused', 'label' => 'Δικαιολογημένος'],
+                    ],
+                ],
+                'columns' => [
+                    ['key' => 'athlete_id', 'label' => 'Αθλητής (ID)'],
+                    ['key' => 'training_id', 'label' => 'Προπόνηση (ID)'],
+                    ['key' => 'status', 'label' => 'Κατάσταση'],
+                    ['key' => 'attended_on', 'label' => 'Ημερομηνία'],
+                ],
+                'fields' => [
+                    ['name' => 'athlete_id', 'label' => 'ID αθλητή', 'type' => 'text', 'required' => true],
+                    ['name' => 'training_id', 'label' => 'ID προπόνησης', 'type' => 'text'],
+                    [
+                        'name' => 'status',
+                        'label' => 'Κατάσταση',
+                        'type' => 'select',
+                        'options' => [
+                            ['value' => 'present', 'label' => 'Παρόν'],
+                            ['value' => 'absent', 'label' => 'Απών'],
+                            ['value' => 'excused', 'label' => 'Δικαιολογημένος'],
+                        ],
+                    ],
+                    ['name' => 'attended_on', 'label' => 'Ημερομηνία', 'type' => 'date'],
+                ],
+                'rules' => [
+                    'athlete_id' => 'required|uuid',
+                    'training_id' => 'nullable|uuid',
+                    'status' => 'nullable|in:present,absent,excused',
+                    'attended_on' => 'nullable|date',
+                ],
+            ],
+            'fees' => [
+                'model' => FeeChargeTemplate::class,
+                'title' => 'Συνδρομές / Πρότυπα χρεώσεων',
+                'page' => 'Admin/Fees/Index',
+                'route' => 'admin.fees',
+                'search' => ['name', 'applies_to'],
+                'status_field' => 'is_active',
+                'filter_options' => [
+                    'status' => [
+                        ['value' => '1', 'label' => 'Ενεργά'],
+                        ['value' => '0', 'label' => 'Ανενεργά'],
+                    ],
+                ],
+                'columns' => [
+                    ['key' => 'name', 'label' => 'Όνομα'],
+                    ['key' => 'amount', 'label' => 'Ποσό'],
+                    ['key' => 'applies_to', 'label' => 'Εφαρμογή'],
+                    ['key' => 'is_active', 'label' => 'Ενεργό'],
+                ],
+                'fields' => [
+                    ['name' => 'name', 'label' => 'Όνομα', 'type' => 'text', 'required' => true],
+                    ['name' => 'amount', 'label' => 'Ποσό (€)', 'type' => 'number', 'required' => true],
+                    [
+                        'name' => 'applies_to',
+                        'label' => 'Εφαρμογή σε',
+                        'type' => 'select',
+                        'options' => [
+                            ['value' => 'athlete', 'label' => 'Αθλητές'],
+                            ['value' => 'member', 'label' => 'Μέλη'],
+                            ['value' => 'class', 'label' => 'Τμήμα'],
+                            ['value' => 'all', 'label' => 'Όλοι'],
+                        ],
+                    ],
+                    ['name' => 'is_active', 'label' => 'Ενεργό', 'type' => 'checkbox'],
+                ],
+                'rules' => [
+                    'name' => 'required|string|max:160',
+                    'amount' => 'required|numeric|min:0',
+                    'applies_to' => 'nullable|in:athlete,member,class,all',
+                    'is_active' => 'boolean',
+                ],
+            ],
+            'transactions' => [
+                'model' => AthleteTransaction::class,
+                'title' => 'Συναλλαγές αθλητών',
+                'page' => 'Admin/Transactions/Index',
+                'route' => 'admin.transactions',
+                'search' => ['athlete_id', 'payment_method', 'comments'],
+                'status_field' => 'type',
+                'filter_options' => [
+                    'status' => [
+                        ['value' => 'charge', 'label' => 'Χρέωση'],
+                        ['value' => 'payment', 'label' => 'Πληρωμή'],
+                    ],
+                ],
+                'columns' => [
+                    ['key' => 'athlete_id', 'label' => 'Αθλητής (ID)'],
+                    ['key' => 'type', 'label' => 'Τύπος'],
+                    ['key' => 'amount', 'label' => 'Ποσό'],
+                    ['key' => 'month', 'label' => 'Μήνας'],
+                    ['key' => 'year', 'label' => 'Έτος'],
+                ],
+                'fields' => [
+                    ['name' => 'athlete_id', 'label' => 'ID αθλητή', 'type' => 'text', 'required' => true],
+                    [
+                        'name' => 'type',
+                        'label' => 'Τύπος',
+                        'type' => 'select',
+                        'required' => true,
+                        'options' => [
+                            ['value' => 'charge', 'label' => 'Χρέωση'],
+                            ['value' => 'payment', 'label' => 'Πληρωμή'],
+                        ],
+                    ],
+                    ['name' => 'amount', 'label' => 'Ποσό (€)', 'type' => 'number', 'required' => true],
+                    ['name' => 'month', 'label' => 'Μήνας', 'type' => 'number'],
+                    ['name' => 'year', 'label' => 'Έτος', 'type' => 'number'],
+                    [
+                        'name' => 'payment_method',
+                        'label' => 'Τρόπος πληρωμής',
+                        'type' => 'select',
+                        'options' => [
+                            ['value' => 'cash', 'label' => 'Μετρητά'],
+                            ['value' => 'card', 'label' => 'Κάρτα'],
+                            ['value' => 'transfer', 'label' => 'Μεταφορά'],
+                            ['value' => 'online', 'label' => 'Online'],
+                            ['value' => 'other', 'label' => 'Άλλο'],
+                        ],
+                    ],
+                ],
+                'rules' => [
+                    'athlete_id' => 'required|uuid',
+                    'type' => 'required|in:charge,payment',
+                    'amount' => 'required|numeric',
+                    'month' => 'nullable|integer|min:1|max:12',
+                    'year' => 'nullable|integer|min:2000|max:2100',
+                    'payment_method' => 'nullable|in:cash,card,transfer,online,other',
+                ],
+            ],
+            'warehouse' => [
+                'model' => WarehouseProduct::class,
+                'title' => 'Αποθήκη',
+                'subtitle' => 'Αρχική / Αποθήκη / Προϊόντα',
+                'page' => 'Admin/Warehouse/Index',
+                'route' => 'admin.warehouse',
+                'create_label' => '+ Νέο προϊόν',
+                'empty_message' => 'Δεν υπάρχουν προϊόντα με αυτά τα κριτήρια.',
+                'search' => ['name', 'sku'],
+                'columns' => [
+                    ['key' => 'sku', 'label' => 'Κωδικός'],
+                    ['key' => 'barcode', 'label' => 'Barcode'],
+                    ['key' => 'name', 'label' => 'Όνομα προϊόντος'],
+                    ['key' => 'brand', 'label' => 'Μάρκα'],
+                    ['key' => 'category', 'label' => 'Κατηγορία'],
+                    ['key' => 'size_color', 'label' => 'Μέγεθος / Χρώμα'],
+                    ['key' => 'stock_qty', 'label' => 'Απόθεμα'],
+                    ['key' => 'imports', 'label' => 'Εισαγωγές'],
+                    ['key' => 'exports', 'label' => 'Εξαγωγές'],
+                    ['key' => 'available', 'label' => 'Διαθέσιμο'],
+                ],
+                'fields' => [
+                    ['name' => 'name', 'label' => 'Όνομα προϊόντος', 'type' => 'text', 'required' => true],
+                    ['name' => 'sku', 'label' => 'Κωδικός', 'type' => 'text'],
+                    ['name' => 'stock_qty', 'label' => 'Απόθεμα', 'type' => 'number'],
+                    ['name' => 'low_stock_threshold', 'label' => 'Ελάχιστο απόθεμα', 'type' => 'number'],
+                    ['name' => 'unit_price', 'label' => 'Κόστος κτήσης (€)', 'type' => 'number'],
+                ],
+                'rules' => [
+                    'name' => 'required|string|max:160',
+                    'sku' => 'nullable|string|max:80',
+                    'stock_qty' => 'nullable|integer|min:0',
+                    'low_stock_threshold' => 'nullable|integer|min:0',
+                    'unit_price' => 'nullable|numeric|min:0',
+                ],
+            ],
+            'rentals' => [
+                'model' => RentalBooking::class,
+                'title' => 'Ενοικίαση – Διαθεσιμότητα γηπέδων',
+                'subtitle' => 'Δήλωσε ποια γήπεδα ενοικιάζονται και σε ποιες ώρες. Οι ώρες προπόνησης τμημάτων, έκτακτες προπονήσεις και αγώνες αφαιρούνται αυτόματα. Η γραμματεία καταχωρεί κράτηση εδώ· το δημόσιο link δείχνει τις ίδιες διαθέσιμες ώρες. Τα έσοδα μπαίνουν στα Οικονομικά μόνο με είσπραξη (μετρητά / POS) ή όταν ολοκληρωθεί online πληρωμή.',
+                'page' => 'Admin/Rentals/Index',
+                'route' => 'admin.rentals',
+                'create_label' => 'Νέα κράτηση',
+                'search' => ['customer_name', 'customer_email', 'customer_phone'],
+                'status_field' => 'status',
+                'filter_options' => [
+                    'status' => [
+                        ['value' => 'pending', 'label' => 'Εκκρεμής'],
+                        ['value' => 'confirmed', 'label' => 'Επιβεβαιωμένη'],
+                        ['value' => 'cancelled', 'label' => 'Ακυρωμένη'],
+                        ['value' => 'completed', 'label' => 'Ολοκληρωμένη'],
+                    ],
+                ],
+                'columns' => [
+                    ['key' => 'customer_name', 'label' => 'Πελάτης'],
+                    ['key' => 'customer_phone', 'label' => 'Τηλέφωνο'],
+                    ['key' => 'starts_at', 'label' => 'Ώρα'],
+                    ['key' => 'amount', 'label' => 'Πληρωμή'],
+                    ['key' => 'status', 'label' => 'Κατάσταση'],
+                ],
+                'fields' => [
+                    ['name' => 'customer_name', 'label' => 'Επώνυμο / Όνομα πελάτη', 'type' => 'text', 'required' => true],
+                    ['name' => 'customer_email', 'label' => 'Email', 'type' => 'email'],
+                    ['name' => 'customer_phone', 'label' => 'Τηλέφωνο', 'type' => 'text'],
+                    ['name' => 'starts_at', 'label' => 'Έναρξη', 'type' => 'datetime-local', 'required' => true],
+                    ['name' => 'ends_at', 'label' => 'Λήξη', 'type' => 'datetime-local'],
+                    ['name' => 'amount', 'label' => 'Ποσό / πληρωμή (€)', 'type' => 'number'],
+                    [
+                        'name' => 'status',
+                        'label' => 'Κατάσταση',
+                        'type' => 'select',
+                        'options' => [
+                            ['value' => 'pending', 'label' => 'Εκκρεμής'],
+                            ['value' => 'confirmed', 'label' => 'Επιβεβαιωμένη'],
+                            ['value' => 'cancelled', 'label' => 'Ακυρωμένη'],
+                            ['value' => 'completed', 'label' => 'Ολοκληρωμένη'],
+                        ],
+                    ],
+                ],
+                'rules' => [
+                    'customer_name' => 'required|string|max:160',
+                    'customer_email' => 'nullable|email|max:190',
+                    'customer_phone' => 'nullable|string|max:40',
+                    'starts_at' => 'required|date',
+                    'ends_at' => 'nullable|date|after_or_equal:starts_at',
+                    'amount' => 'nullable|numeric|min:0',
+                    'status' => 'nullable|in:pending,confirmed,cancelled,completed',
+                ],
+            ],
+            'announcements' => [
+                'model' => Announcement::class,
+                'title' => 'Ανακοινώσεις',
+                'page' => 'Admin/Announcements/Index',
+                'route' => 'admin.announcements',
+                'search' => ['title', 'body'],
+                'columns' => [
+                    ['key' => 'title', 'label' => 'Τίτλος'],
+                    ['key' => 'published_at', 'label' => 'Δημοσίευση'],
+                ],
+                'fields' => [
+                    ['name' => 'title', 'label' => 'Τίτλος', 'type' => 'text', 'required' => true],
+                    ['name' => 'body', 'label' => 'Κείμενο', 'type' => 'textarea', 'required' => true],
+                    ['name' => 'published_at', 'label' => 'Ημ/νία δημοσίευσης', 'type' => 'datetime-local'],
+                ],
+                'rules' => [
+                    'title' => 'required|string|max:200',
+                    'body' => 'required|string',
+                    'published_at' => 'nullable|date',
+                ],
+            ],
+            'photos' => [
+                'model' => GalleryPhoto::class,
+                'title' => 'Φωτογραφίες',
+                'subtitle' => 'Διαχείριση φωτογραφιών και συλλογών.',
+                'page' => 'Admin/Photos/Index',
+                'route' => 'admin.photos',
+                'create_label' => 'ΑΝΕΒΑΣΜΑ ΦΩΤΟΓΡΑΦΙΩΝ',
+                'empty_message' => 'Δεν υπάρχουν φωτογραφίες ακόμη.',
+                'search' => ['title', 'path'],
+                'columns' => [
+                    ['key' => 'title', 'label' => 'Τίτλος'],
+                    ['key' => 'path', 'label' => 'Αρχείο'],
+                    ['key' => 'gdpr_cleared', 'label' => 'GDPR'],
+                ],
+                'fields' => [
+                    ['name' => 'title', 'label' => 'Τίτλος', 'type' => 'text', 'required' => true],
+                    ['name' => 'path', 'label' => 'Αρχείο / διαδρομή', 'type' => 'text'],
+                    ['name' => 'gdpr_cleared', 'label' => 'Συγκατάθεση GDPR', 'type' => 'checkbox'],
+                ],
+                'rules' => [
+                    'title' => 'required|string|max:200',
+                    'path' => 'nullable|string|max:500',
+                    'gdpr_cleared' => 'boolean',
+                ],
+            ],
+            'partners' => [
+                'model' => PartnerBusiness::class,
+                'title' => 'Συμβεβλημένες Επιχειρήσεις',
+                'subtitle' => 'Αποκλειστικές προσφορές και προνόμια για τα μέλη του συλλόγου μας.',
+                'page' => 'Admin/Partners/Index',
+                'route' => 'admin.partners',
+                'create_label' => '+ Νέος συνεργάτης',
+                'empty_message' => 'Δεν υπάρχουν συνεργάτες ακόμη.',
+                'search' => ['name', 'contact'],
+                'columns' => [
+                    ['key' => 'name', 'label' => 'Όνομα'],
+                    ['key' => 'contact', 'label' => 'Κατηγορία / Διεύθυνση'],
+                ],
+                'fields' => [
+                    ['name' => 'name', 'label' => 'Όνομα', 'type' => 'text', 'required' => true],
+                    ['name' => 'contact', 'label' => 'Κατηγορία / Διεύθυνση / URL', 'type' => 'text'],
+                ],
+                'rules' => [
+                    'name' => 'required|string|max:200',
+                    'contact' => 'nullable|string|max:200',
+                ],
+            ],
+            'associations' => [
+                'model' => Association::class,
+                'title' => 'Σωματείο',
+                'subtitle' => 'Σωματεία και σύλλογοι που συνδέονται με την ακαδημία.',
+                'page' => 'Admin/Associations/Index',
+                'route' => 'admin.associations',
+                'create_label' => '+ Νέο σωματείο',
+                'empty_message' => 'Δεν υπάρχουν σωματεία ακόμη.',
+                'search' => ['name'],
+                'columns' => [
+                    ['key' => 'name', 'label' => 'Όνομα'],
+                    ['key' => 'city', 'label' => 'Πόλη'],
+                    ['key' => 'phone', 'label' => 'Τηλέφωνο'],
+                    ['key' => 'email', 'label' => 'Email'],
+                    ['key' => 'active', 'label' => 'Κατάσταση'],
+                ],
+                'fields' => [
+                    ['name' => 'name', 'label' => 'Όνομα', 'type' => 'text', 'required' => true],
+                    ['name' => 'city', 'label' => 'Πόλη', 'type' => 'text'],
+                    ['name' => 'phone', 'label' => 'Τηλέφωνο', 'type' => 'text'],
+                    ['name' => 'email', 'label' => 'Email', 'type' => 'email'],
+                    ['name' => 'address', 'label' => 'Διεύθυνση', 'type' => 'text'],
+                    [
+                        'name' => 'active',
+                        'label' => 'Κατάσταση',
+                        'type' => 'select',
+                        'default' => '1',
+                        'options' => [
+                            ['value' => '1', 'label' => 'Ενεργό'],
+                            ['value' => '0', 'label' => 'Ανενεργό'],
+                        ],
+                    ],
+                ],
+                'rules' => [
+                    'name' => 'required|string|max:160',
+                    'city' => 'nullable|string|max:120',
+                    'phone' => 'nullable|string|max:40',
+                    'email' => 'nullable|email|max:160',
+                    'address' => 'nullable|string|max:255',
+                    'active' => 'nullable',
+                ],
+            ],
+            'sports' => [
+                'model' => Sport::class,
+                'title' => 'Άθλημα',
+                'subtitle' => 'Επίλεξε τα αθλήματα που προσφέρει η ακαδημία από τον κατάλογο.',
+                'page' => 'Admin/Sports/Index',
+                'route' => 'admin.sports',
+                'create_label' => 'Νέο άθλημα',
+                'empty_message' => 'Επίλεξε αθλήματα από τον κατάλογο.',
+                'search' => ['name'],
+                'columns' => [
+                    ['key' => 'name', 'label' => 'Όνομα'],
+                ],
+                'fields' => [
+                    ['name' => 'name', 'label' => 'Όνομα', 'type' => 'text', 'required' => true],
+                ],
+                'rules' => [
+                    'name' => 'required|string|max:120',
+                ],
+            ],
+            'protocol' => [
+                'model' => DocumentProtocolEntry::class,
+                'title' => 'Πρωτόκολλο Εγγράφων',
+                'page' => 'Admin/Protocol/Index',
+                'route' => 'admin.protocol',
+                'create_label' => '+ Καταχώρηση Εγγράφου',
+                'empty_message' => 'Δεν υπάρχουν δεδομένα στον πίνακα',
+                'search' => ['subject', 'protocol_number'],
+                'status_field' => 'direction',
+                'filter_options' => [
+                    'status' => [
+                        ['value' => 'in', 'label' => 'Εισερχόμενα'],
+                        ['value' => 'out', 'label' => 'Εξερχόμενα'],
+                    ],
+                ],
+                'columns' => [
+                    ['key' => 'protocol_number', 'label' => 'Αρ. Πρωτοκόλλου'],
+                    ['key' => 'direction_label', 'label' => 'Κατεύθυνση'],
+                    ['key' => 'sport', 'label' => 'Άθλημα'],
+                    ['key' => 'document_date', 'label' => 'Ημερομηνία'],
+                    ['key' => 'subject', 'label' => 'Θέμα'],
+                    ['key' => 'party', 'label' => 'Αποστολέας/Παραλήπτης'],
+                    ['key' => 'file_label', 'label' => 'Αρχείο'],
+                    ['key' => 'status_label', 'label' => 'Κατάσταση'],
+                ],
+                'fields' => [
+                    ['name' => 'protocol_number', 'label' => 'Αρ. Πρωτοκόλλου', 'type' => 'number', 'required' => true],
+                    [
+                        'name' => 'direction',
+                        'label' => 'Κατεύθυνση',
+                        'type' => 'select',
+                        'options' => [
+                            ['value' => 'in', 'label' => 'Εισερχόμενο'],
+                            ['value' => 'out', 'label' => 'Εξερχόμενο'],
+                        ],
+                    ],
+                    ['name' => 'subject', 'label' => 'Θέμα', 'type' => 'text', 'required' => true],
+                    ['name' => 'document_date', 'label' => 'Ημερομηνία', 'type' => 'date'],
+                ],
+                'rules' => [
+                    'protocol_number' => 'required|integer|min:1',
+                    'direction' => 'nullable|in:in,out',
+                    'subject' => 'required|string|max:300',
+                    'document_date' => 'nullable|date',
+                ],
+            ],
+        ];
+    }
+
+    public static function get(string $key): array
+    {
+        $all = self::definitions();
+
+        abort_unless(isset($all[$key]), 404);
+
+        return $all[$key];
+    }
+}

@@ -1,0 +1,46 @@
+export function normalizeSportKey(value) {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/\p{M}/gu, '')
+        .replace(/\s+/g, ' ');
+}
+
+export function isBasketballSport(sport) {
+    const key = normalizeSportKey(sport);
+    if (!key) {
+        return false;
+    }
+    const compact = key.replace(/[^a-zα-ω0-9]/g, '');
+    return (
+        key.includes('basket') ||
+        key.includes('μπασκετ') ||
+        compact.includes('kalathosfair') ||
+        key.includes('καλαθοσφαιρ')
+    );
+}
+
+export function isVolleyballSport(sport) {
+    const key = normalizeSportKey(sport);
+    if (!key) {
+        return false;
+    }
+    const compact = key.replace(/[^a-zα-ω0-9]/g, '');
+    return (
+        key.includes('volley') ||
+        key.includes('voley') ||
+        compact.includes('volleyball') ||
+        compact.includes('voleyball') ||
+        key.includes('volei') ||
+        key.includes('vollei') ||
+        key.includes('petosfair') ||
+        key.includes('petosfairi') ||
+        key.includes('πετοσφαιρ') ||
+        key.includes('βολευ') ||
+        key.includes('βολει') ||
+        key.includes('beach volley') ||
+        key.includes('beachvolley') ||
+        key.includes('snow volley')
+    );
+}

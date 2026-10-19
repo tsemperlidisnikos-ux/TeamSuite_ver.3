@@ -1,0 +1,15 @@
+{
+  "appId": "com.teamsuite.app",
+  "appName": "TeamSuite",
+  "webDir": "../public",
+  "server": {
+    "url": "http://localhost:8000",
+    "cleartext": false
+  },
+  "android": {
+    "allowMixedContent": false
+  },
+  "ios": {
+    "contentInset": "automatic"
+  }
+}

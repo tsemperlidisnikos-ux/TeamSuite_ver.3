@@ -1,0 +1,237 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Ocean Slate — TeamSuite default (legacy data-appearance=ocean-slate).
+ * Black chrome + sky teal accents, light content surface.
+ */
+:root,
+[data-theme='ocean-slate'] {
+    --font-body: 'Manrope', sans-serif;
+    --font-display: 'Sora', sans-serif;
+    --ts-bg: #f0f4f8;
+    --ts-bg-deep: #e4ebf2;
+    --ts-surface: #ffffff;
+    --ts-surface-2: #e8eef4;
+    --ts-border: rgba(21, 32, 51, 0.12);
+    --ts-fg: #152033;
+    --ts-fg-soft: #2a3a4d;
+    --ts-muted: #4a5d70;
+    --ts-hover: rgba(42, 155, 181, 0.07);
+    --ts-accent: #2a9bb5;
+    --ts-accent-hover: #1e7a8f;
+    --ts-accent-soft: rgba(42, 155, 181, 0.14);
+    --ts-accent-fg: #ffffff;
+    --ts-chrome: #000000;
+    --ts-chrome-fg: #f0f4f8;
+    --ts-chrome-muted: rgba(240, 244, 248, 0.72);
+    --ts-shadow: 0 14px 32px rgba(28, 43, 58, 0.1);
+    --ts-body-top: #f5f8fb;
+    --ts-danger: #b42318;
+    --ts-warn: #b54708;
+    --ts-positive: #067647;
+}
+
+[data-theme='aegean-light'] {
+    --ts-bg: #eef3f8;
+    --ts-bg-deep: #e4ebf2;
+    --ts-surface: #ffffff;
+    --ts-surface-2: #f8fafc;
+    --ts-border: #e2e8f0;
+    --ts-fg: #0f172a;
+    --ts-fg-soft: #334155;
+    --ts-muted: #64748b;
+    --ts-hover: #f1f5f9;
+    --ts-accent: #2a9bb5;
+    --ts-accent-hover: #1e7a8f;
+    --ts-accent-soft: rgba(42, 155, 181, 0.14);
+    --ts-accent-fg: #ffffff;
+    --ts-chrome: #0b1f3a;
+    --ts-chrome-fg: #f0f4f8;
+    --ts-chrome-muted: rgba(240, 244, 248, 0.72);
+    --ts-shadow: 0 14px 32px rgba(28, 43, 58, 0.1);
+    --ts-body-top: #f5f8fb;
+    --ts-danger: #b42318;
+    --ts-warn: #b54708;
+    --ts-positive: #067647;
+}
+
+[data-theme='harbor-navy'] {
+    --ts-bg: #e8eef5;
+    --ts-bg-deep: #dde6f0;
+    --ts-surface: #ffffff;
+    --ts-surface-2: #f1f5f9;
+    --ts-border: #d7e0ea;
+    --ts-fg: #0f172a;
+    --ts-fg-soft: #1e293b;
+    --ts-muted: #64748b;
+    --ts-hover: #dde6f0;
+    --ts-accent: #1e3a5f;
+    --ts-accent-hover: #152a45;
+    --ts-accent-soft: #dbe7f3;
+    --ts-accent-fg: #ffffff;
+    --ts-chrome: #0b1f3a;
+    --ts-chrome-fg: #f0f4f8;
+    --ts-chrome-muted: rgba(240, 244, 248, 0.72);
+    --ts-shadow: 0 14px 32px rgba(15, 23, 42, 0.12);
+    --ts-body-top: #eef3f8;
+    --ts-danger: #b42318;
+    --ts-warn: #b54708;
+    --ts-positive: #067647;
+}
+
+[data-theme='night-pitch'] {
+    --ts-bg: #0f1419;
+    --ts-bg-deep: #0b0f14;
+    --ts-surface: #161f29;
+    --ts-surface-2: #121a22;
+    --ts-border: #2a3544;
+    --ts-fg: #f1f5f9;
+    --ts-fg-soft: #e2e8f0;
+    --ts-muted: #94a3b8;
+    --ts-hover: #1c2530;
+    --ts-accent: #14b8a6;
+    --ts-accent-hover: #2dd4bf;
+    --ts-accent-soft: rgba(20, 184, 166, 0.16);
+    --ts-accent-fg: #0f1419;
+    --ts-chrome: #08090b;
+    --ts-chrome-fg: #f1f5f9;
+    --ts-chrome-muted: rgba(241, 245, 249, 0.7);
+    --ts-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+    --ts-body-top: #0f1419;
+    --ts-danger: #f07167;
+    --ts-warn: #ffc4a8;
+    --ts-positive: #3dcf8e;
+}
+
+@layer base {
+    html,
+    body {
+        background-color: var(--ts-bg);
+        color: var(--ts-fg);
+        font-family: var(--font-body);
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+        font: inherit;
+    }
+
+    h1,
+    h2,
+    h3,
+    strong,
+    .font-display {
+        font-family: var(--font-display);
+    }
+}
+
+/* Center brand lockup — TeamSuite header parity (transparent logo plate). */
+.app-header-brand {
+    max-width: min(90vw, 52rem);
+    white-space: nowrap;
+}
+
+.app-header-brand-logo {
+    width: 72px;
+    height: 72px;
+    flex-shrink: 0;
+    object-fit: contain;
+    background: transparent;
+    pointer-events: none;
+    user-select: none;
+}
+
+.app-header-brand-name,
+.app-header-brand-suite {
+    font-family: var(--font-display);
+    font-size: clamp(1.2rem, 2.4vw, 1.9rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+}
+
+.app-header-brand-name {
+    color: #ffffff;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.app-header-brand-suite {
+    color: #4db8ff;
+    flex-shrink: 0;
+}
+
+@media (min-width: 640px) {
+    .app-header-brand-logo {
+        width: 110px;
+        height: 110px;
+    }
+}
+
+/* Compact chrome for dense screens (e.g. athlete personal tab). */
+.admin-layout-compact .app-header-brand-logo {
+    width: 44px;
+    height: 44px;
+}
+
+@media (min-width: 640px) {
+    .admin-layout-compact .app-header-brand-logo {
+        width: 52px;
+        height: 52px;
+    }
+}
+
+.admin-layout-compact .app-header-brand-name,
+.admin-layout-compact .app-header-brand-suite {
+    font-size: clamp(1rem, 1.8vw, 1.35rem);
+}
+
+/* Indeterminate progress for long-running restore / uploads */
+@keyframes backup-restore-slide {
+    0% {
+        transform: translateX(-120%);
+    }
+    100% {
+        transform: translateX(320%);
+    }
+}
+
+.backup-restore-progress {
+    animation: backup-restore-slide 1.35s ease-in-out infinite;
+}
+
+@media print {
+    .no-print {
+        display: none !important;
+    }
+
+    body.printing-finance-balance * {
+        visibility: hidden !important;
+    }
+
+    body.printing-finance-balance #balance-print-area,
+    body.printing-finance-balance #balance-print-area * {
+        visibility: visible !important;
+    }
+
+    body.printing-finance-balance #balance-print-area {
+        position: absolute;
+        inset: 0 auto auto 0;
+        width: 100%;
+    }
+
+    body.printing-finance-balance-collections .balance-summary,
+    body.printing-finance-balance-collections .balance-table-block--expenses {
+        display: none !important;
+        visibility: hidden !important;
+    }
+
+    body.printing-finance-balance .balance-collection-report,
+    body.printing-finance-balance .balance-table-block {
+        break-inside: avoid;
+    }
+}
