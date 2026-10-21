@@ -11,13 +11,14 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY resources ./resources
 COPY public ./public
-COPY vite.config.js tailwind.config.js postcss.config.js ./
+COPY vite.config.js tailwind.config.js postcss.config.js jsconfig.json ./
 RUN npm run build
 
 # ---------- Composer ----------
 FROM serversideup/php:8.3-fpm-nginx AS vendor
 USER root
 WORKDIR /var/www/html
+ENV COMPOSER_ALLOW_SUPERUSER=1
 COPY composer.json composer.lock ./
 RUN composer install \
     --no-dev \
@@ -41,7 +42,7 @@ ENV NGINX_WEBROOT=/var/www/html/public \
 
 COPY --chown=www-data:www-data . /var/www/html
 COPY --from=vendor --chown=www-data:www-data /var/www/html/vendor /var/www/html/vendor
-COPY --from=frontend --chown=www-data:www-data /var/www/html/public/build /var/www/html/public/build
+COPY --from=frontend --chown=www-data:www-data /app/public/build /var/www/html/public/build
 
 # Startup hooks (migrations / caches) — do NOT replace image ENTRYPOINT
 COPY --chmod=755 docker/entrypoint.d/99-teamsuite.sh /etc/entrypoint.d/99-teamsuite.sh
