@@ -33,12 +33,16 @@ FROM serversideup/php:8.3-fpm-nginx
 USER root
 WORKDIR /var/www/html
 
-# Laravel public webroot (critical)
+# Laravel public webroot (critical).
+# File/sync drivers avoid HTTP 500 when Coolify DB link is briefly unavailable.
 ENV NGINX_WEBROOT=/var/www/html/public \
     SSL_MODE=off \
     AUTORUN_ENABLED=false \
     PHP_OPCACHE_ENABLE=1 \
-    HEALTHCHECK_PATH=/up
+    HEALTHCHECK_PATH=/up \
+    SESSION_DRIVER=file \
+    CACHE_STORE=file \
+    QUEUE_CONNECTION=sync
 
 COPY --chown=www-data:www-data . /var/www/html
 COPY --from=vendor --chown=www-data:www-data /var/www/html/vendor /var/www/html/vendor
