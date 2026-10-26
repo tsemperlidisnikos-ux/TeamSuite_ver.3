@@ -143,9 +143,22 @@ class BackupRestoreController extends Controller
         $request->session()->put('backup_just_restored', true);
         $request->session()->put('backup_restored_club_id', $restoredClub->id);
 
+        $activeInDb = (int) ($counts['activeAthletes'] ?? 0);
+        $activeInBackup = (int) ($counts['activeAthletesInBackup'] ?? 0);
+        $skipped = (int) ($counts['studentsSkipped'] ?? 0);
+        $success = 'Η επαναφορά ολοκληρώθηκε: '.$restoredClub->name
+            .' · Ενεργοί αθλητές '.$activeInDb
+            .($activeInBackup > 0 ? ' / '.$activeInBackup.' στο backup' : '');
+        if ($skipped > 0) {
+            $success .= ' · Παραλείφθηκαν '.$skipped.' εγγραφές αθλητών';
+        }
+        if ($activeInBackup > 0 && $activeInDb !== $activeInBackup) {
+            $success .= ' · Προσοχή: διαφορά ενεργών με το backup';
+        }
+
         return redirect()
             ->route('admin.settings.backup.index')
-            ->with('success', 'Η επαναφορά ολοκληρώθηκε: '.$restoredClub->name)
+            ->with('success', $success)
             ->with('backup_dry_run', [
                 'counts' => $counts,
                 'clubExists' => true,

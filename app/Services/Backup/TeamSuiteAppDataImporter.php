@@ -89,7 +89,17 @@ class TeamSuiteAppDataImporter
         $counts['staff'] = $this->importStaff($clubId, $appData['staff'] ?? []);
         $counts['clubMembers'] = $this->importClubMembers($clubId, $appData['clubMembers'] ?? []);
         $counts['classes'] = $this->importClasses($clubId, $appData['classes'] ?? []);
-        $counts['students'] = $this->importStudents($clubId, $appData['students'] ?? []);
+        $studentImport = $this->importStudents($clubId, $appData['students'] ?? []);
+        $counts['students'] = $studentImport['imported'];
+        $counts['studentsSkipped'] = $studentImport['skipped'];
+        $counts['deletedStudents'] = $this->applyDeletedStudentIds(
+            $clubId,
+            is_array($appData['deletedStudentIds'] ?? null) ? $appData['deletedStudentIds'] : []
+        );
+        $counts['activeAthletes'] = $this->countActiveAthletes($clubId);
+        $counts['activeAthletesInBackup'] = $this->countActiveInBackupRows(
+            is_array($appData['students'] ?? null) ? $appData['students'] : []
+        );
         $counts['parentLinks'] = $this->importParentLinks($clubId, $appData['parentLinks'] ?? []);
         $counts['schedule'] = $this->importSchedule($clubId, $appData['schedule'] ?? []);
         $counts['trainings'] = $this->importTrainings($clubId, $appData['trainings'] ?? []);
@@ -97,7 +107,9 @@ class TeamSuiteAppDataImporter
         $counts['matches'] = $this->importMatches($clubId, $appData['matches'] ?? []);
         $counts['athleteChangeLogs'] = $this->importAthleteChangeLogs($clubId, $appData['athleteChangeLogs'] ?? []);
         $counts['feeChargeTemplates'] = $this->importFeeTemplates($clubId, $appData['feeChargeTemplates'] ?? []);
-        $counts['transactions'] = $this->importTransactions($clubId, $appData['transactions'] ?? []);
+        $transactionImport = $this->importTransactions($clubId, $appData['transactions'] ?? []);
+        $counts['transactions'] = $transactionImport['imported'];
+        $counts['transactionsSkipped'] = $transactionImport['skipped'];
         $counts['revenues'] = $this->importRevenues($clubId, $appData['revenues'] ?? []);
         $counts['expenses'] = $this->importExpenses($clubId, $appData['expenses'] ?? []);
         $counts['budgets'] = $this->importBudgets($clubId, $appData['budgets'] ?? []);
@@ -416,45 +428,187 @@ class TeamSuiteAppDataImporter
     }
 
     /** @param  list<array<string, mixed>>  $rows */
-    private function importStudents(string $clubId, array $rows): int
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return array{imported: int, skipped: int}
+     */
+    private function importStudents(string $clubId, array $rows): array
+    {
+        $imported = 0;
+        $skipped = 0;
+
+        foreach ($rows as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+
+            try {
+                $attrs = $this->mapFields($row, [
+                    'firstName' => 'first_name',
+                    'lastName' => 'last_name',
+                    'email' => 'email',
+                    'phone' => 'phone',
+                    'birthDate' => 'birth_date',
+                    'status' => 'status',
+                    'monthlyFee' => 'monthly_fee',
+                    'enrolledAt' => 'enrolled_at',
+                    'gender' => 'gender',
+                    'guardianName' => 'guardian_name',
+                    'guardianPhone' => 'guardian_phone',
+                    'sport' => 'sport',
+                    'gdprConsent' => 'gdpr_consent',
+                ]);
+
+                // Legacy treats missing status as active (Dashboard: status ?? 'active').
+                $attrs['status'] = $this->normalizeAthleteStatus($attrs['status'] ?? ($row['status'] ?? 'active'));
+
+                if (isset($row['healthCardStatus'])) {
+                    $attrs['health_card'] = $row['healthCardStatus'] !== 'none';
+                }
+                if (isset($row['healthCardExpires'])) {
+                    $attrs['health_card_expires'] = $this->parseDate($row['healthCardExpires']);
+                }
+                if (! empty($row['amka'])) {
+                    try {
+                        $attrs = array_merge($attrs, $this->amka->storeFromPlaintext((string) $row['amka']));
+                    } catch (\Throwable) {
+                        // Keep the athlete even when AMKA encryption fails for one row.
+                        if (! empty($row['amkaFp'])) {
+                            $attrs['amka_fingerprint'] = $row['amkaFp'];
+                        }
+                    }
+                } elseif (! empty($row['amkaFp'])) {
+                    $attrs['amka_fingerprint'] = $row['amkaFp'];
+                }
+                $attrs['meta'] = $this->normalizeAthleteMeta(
+                    $this->metaRemainder($row, ['id', 'firstName', 'lastName', 'email', 'phone', 'birthDate', 'status', 'monthlyFee', 'enrolledAt', 'gender', 'guardianName', 'guardianPhone', 'sport', 'gdprConsent', 'amka', 'amkaFp', 'healthCardStatus', 'healthCardExpires'])
+                );
+                $athlete = $this->upsert(Athlete::class, $clubId, $row, $attrs, 'students');
+                $this->syncAthleteClasses($athlete, $row);
+                $imported++;
+            } catch (\Throwable $e) {
+                $skipped++;
+                report($e);
+            }
+        }
+
+        // Second pass: status only — ensures merge restores match backup even if an
+        // earlier partial run left stale inactive/active flags.
+        $this->reconcileAthleteStatusesFromBackup($clubId, $rows);
+
+        return ['imported' => $imported, 'skipped' => $skipped];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     */
+    private function reconcileAthleteStatusesFromBackup(string $clubId, array $rows): void
+    {
+        $statusByLegacyId = [];
+        foreach ($rows as $row) {
+            if (! is_array($row) || empty($row['id'])) {
+                continue;
+            }
+            // Match legacy TeamSuite: missing status ⇒ active (not inactive).
+            $statusByLegacyId[(string) $row['id']] = $this->normalizeAthleteStatus($row['status'] ?? 'active');
+        }
+
+        if ($statusByLegacyId === []) {
+            return;
+        }
+
+        Athlete::query()
+            ->withoutGlobalScopes()
+            ->where('club_id', $clubId)
+            ->whereIn('legacy_id', array_keys($statusByLegacyId))
+            ->orderBy('id')
+            ->chunkById(200, function ($athletes) use ($statusByLegacyId) {
+                foreach ($athletes as $athlete) {
+                    $legacyId = (string) $athlete->legacy_id;
+                    $next = $statusByLegacyId[$legacyId] ?? null;
+                    if ($next === null || $athlete->status === $next) {
+                        continue;
+                    }
+                    $athlete->forceFill(['status' => $next])->save();
+                }
+            });
+    }
+
+    /**
+     * @param  list<mixed>  $deletedIds
+     */
+    private function applyDeletedStudentIds(string $clubId, array $deletedIds): int
+    {
+        $legacyIds = [];
+        foreach ($deletedIds as $id) {
+            if (is_string($id) || is_numeric($id)) {
+                $legacyIds[] = (string) $id;
+            }
+        }
+        $legacyIds = array_values(array_unique(array_filter($legacyIds)));
+        if ($legacyIds === []) {
+            return 0;
+        }
+
+        $athletes = Athlete::query()
+            ->withoutGlobalScopes()
+            ->where('club_id', $clubId)
+            ->whereIn('legacy_id', $legacyIds)
+            ->get();
+
+        $count = 0;
+        foreach ($athletes as $athlete) {
+            if (method_exists($athlete, 'trashed') && $athlete->trashed()) {
+                continue;
+            }
+            $athlete->forceFill(['status' => 'inactive'])->save();
+            $athlete->delete();
+            $count++;
+        }
+
+        return $count;
+    }
+
+    private function normalizeAthleteStatus(mixed $status): string
+    {
+        $value = strtolower(trim((string) $status));
+
+        if ($value === '') {
+            return 'active';
+        }
+
+        return match ($value) {
+            'active', 'ενεργός', 'ενεργος' => 'active',
+            'trial', 'δοκιμαστικός', 'δοκιμαστικος' => 'trial',
+            'inactive', 'ανενεργός', 'ανενεργος' => 'inactive',
+            // Unknown legacy labels → inactive (safer than inventing "active").
+            default => 'inactive',
+        };
+    }
+
+    private function countActiveAthletes(string $clubId): int
+    {
+        return Athlete::query()
+            ->withoutGlobalScopes()
+            ->where('club_id', $clubId)
+            ->whereNull('deleted_at')
+            ->where('status', 'active')
+            ->count();
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     */
+    private function countActiveInBackupRows(array $rows): int
     {
         $count = 0;
         foreach ($rows as $row) {
             if (! is_array($row)) {
                 continue;
             }
-            $attrs = $this->mapFields($row, [
-                'firstName' => 'first_name',
-                'lastName' => 'last_name',
-                'email' => 'email',
-                'phone' => 'phone',
-                'birthDate' => 'birth_date',
-                'status' => 'status',
-                'monthlyFee' => 'monthly_fee',
-                'enrolledAt' => 'enrolled_at',
-                'gender' => 'gender',
-                'guardianName' => 'guardian_name',
-                'guardianPhone' => 'guardian_phone',
-                'sport' => 'sport',
-                'gdprConsent' => 'gdpr_consent',
-            ]);
-            if (isset($row['healthCardStatus'])) {
-                $attrs['health_card'] = $row['healthCardStatus'] !== 'none';
+            if ($this->normalizeAthleteStatus($row['status'] ?? 'active') === 'active') {
+                $count++;
             }
-            if (isset($row['healthCardExpires'])) {
-                $attrs['health_card_expires'] = $this->parseDate($row['healthCardExpires']);
-            }
-            if (! empty($row['amka'])) {
-                $attrs = array_merge($attrs, $this->amka->storeFromPlaintext((string) $row['amka']));
-            } elseif (! empty($row['amkaFp'])) {
-                $attrs['amka_fingerprint'] = $row['amkaFp'];
-            }
-            $attrs['meta'] = $this->normalizeAthleteMeta(
-                $this->metaRemainder($row, ['id', 'firstName', 'lastName', 'email', 'phone', 'birthDate', 'status', 'monthlyFee', 'enrolledAt', 'gender', 'guardianName', 'guardianPhone', 'sport', 'gdprConsent', 'amka', 'amkaFp', 'healthCardStatus', 'healthCardExpires'])
-            );
-            $athlete = $this->upsert(Athlete::class, $clubId, $row, $attrs, 'students');
-            $this->syncAthleteClasses($athlete, $row);
-            $count++;
         }
 
         return $count;
@@ -931,10 +1085,14 @@ class TeamSuiteAppDataImporter
         ]);
     }
 
-    /** @param  list<array<string, mixed>>  $rows */
-    private function importTransactions(string $clubId, array $rows): int
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return array{imported: int, skipped: int}
+     */
+    private function importTransactions(string $clubId, array $rows): array
     {
-        $count = 0;
+        $imported = 0;
+        $skipped = 0;
         foreach ($rows as $row) {
             if (! is_array($row)) {
                 continue;
@@ -952,15 +1110,54 @@ class TeamSuiteAppDataImporter
             ]);
             $attrs['athlete_id'] = $this->resolveMap('students', $row['athleteId'] ?? $row['studentId'] ?? null);
             if (! $attrs['athlete_id']) {
+                $skipped++;
+
                 continue;
             }
+            $attrs['type'] = $this->normalizeTransactionType($attrs['type'] ?? ($row['type'] ?? null));
             $attrs['allocates_charge_id'] = $this->resolveMap('transactions', $row['allocatesChargeId'] ?? null);
             $attrs['meta'] = $this->metaRemainder($row, ['id', 'type', 'amount', 'month', 'year', 'paymentMethod', 'receiptNumber', 'receiptSeries', 'receiptSeq', 'comments', 'athleteId', 'studentId', 'allocatesChargeId', 'createdAt', 'updatedAt']);
             $this->upsert(AthleteTransaction::class, $clubId, $row, $attrs, 'transactions');
-            $count++;
+            $imported++;
         }
 
-        return $count;
+        // Second pass: payments may appear before their charge in the backup JSON.
+        $this->reconcileTransactionAllocations($clubId, $rows);
+
+        return ['imported' => $imported, 'skipped' => $skipped];
+    }
+
+    private function normalizeTransactionType(mixed $type): string
+    {
+        $value = strtolower(trim((string) $type));
+
+        return $value === 'charge' ? 'charge' : 'payment';
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     */
+    private function reconcileTransactionAllocations(string $clubId, array $rows): void
+    {
+        foreach ($rows as $row) {
+            if (! is_array($row) || empty($row['id']) || empty($row['allocatesChargeId'])) {
+                continue;
+            }
+            $paymentId = $this->resolveMap('transactions', $row['id']);
+            $chargeId = $this->resolveMap('transactions', $row['allocatesChargeId']);
+            if (! $paymentId || ! $chargeId) {
+                continue;
+            }
+            AthleteTransaction::query()
+                ->withoutGlobalScopes()
+                ->where('club_id', $clubId)
+                ->whereKey($paymentId)
+                ->where(function ($query) use ($chargeId) {
+                    $query->whereNull('allocates_charge_id')
+                        ->orWhere('allocates_charge_id', '!=', $chargeId);
+                })
+                ->update(['allocates_charge_id' => $chargeId]);
+        }
     }
 
     /** @param  list<array<string, mixed>>  $rows */

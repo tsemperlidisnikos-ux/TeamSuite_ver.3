@@ -19,10 +19,14 @@ class FinancePageMetrics
      *     from: string,
      *     to: string,
      *     revenue: float,
+     *     revenuePaid: float,
+     *     revenuePending: float,
      *     expense: float,
      *     net: float,
      *     collectionMethods: list<array{key: string, label: string, count: int, amount: float}>,
      *     incomeRows: list<array{key: string, sport: string, category: string, cash: float, card: float, bank: float, online: float, total: float}>,
+     *     incomeRowsPaid: list<array{key: string, sport: string, category: string, cash: float, card: float, bank: float, online: float, total: float}>,
+     *     incomeRowsPending: list<array{key: string, sport: string, category: string, cash: float, card: float, bank: float, online: float, total: float}>,
      *     expenseRows: list<array{key: string, sport: string, category: string, cash: float, card: float, bank: float, online: float, total: float}>
      * }
      */
@@ -55,10 +59,21 @@ class FinancePageMetrics
             }
         }
 
-        // Legacy FinanceBalancePanel: Σ filtered revenues / expenses (not + athlete payments).
+        $paidRevenues = [];
+        $pendingRevenues = [];
         $revenueTotal = 0.0;
+        $revenuePaid = 0.0;
+        $revenuePending = 0.0;
         foreach ($filteredRevenues as $revenue) {
-            $revenueTotal += (float) $revenue->amount;
+            $amount = (float) $revenue->amount;
+            $revenueTotal += $amount;
+            if ($this->isRevenuePaid($revenue)) {
+                $paidRevenues[] = $revenue;
+                $revenuePaid += $amount;
+            } else {
+                $pendingRevenues[] = $revenue;
+                $revenuePending += $amount;
+            }
         }
 
         $expenseTotal = 0.0;
@@ -69,12 +84,8 @@ class FinancePageMetrics
         // Legacy: paid revenues with linkedTransactionId/part dedupe; keep viva/eurobank/stripe distinct.
         $methods = [];
         $seenLinkedParts = [];
-        foreach ($filteredRevenues as $revenue) {
+        foreach ($paidRevenues as $revenue) {
             $meta = $revenue->meta ?? [];
-            $status = strtolower((string) ($meta['paymentStatus'] ?? $meta['payment_status'] ?? 'paid'));
-            if ($status !== '' && $status !== 'paid' && $status !== '1') {
-                continue;
-            }
 
             $sourceId = (string) ($meta['linkedTransactionId'] ?? $meta['linked_transaction_id']
                 ?? $meta['linkedRentalBookingId'] ?? $meta['linked_rental_booking_id'] ?? '');
@@ -123,10 +134,14 @@ class FinancePageMetrics
             'from' => $fromDate,
             'to' => $toDate,
             'revenue' => round($revenueTotal, 2),
+            'revenuePaid' => round($revenuePaid, 2),
+            'revenuePending' => round($revenuePending, 2),
             'expense' => round($expenseTotal, 2),
             'net' => round($revenueTotal - $expenseTotal, 2),
             'collectionMethods' => $ordered,
             'incomeRows' => $this->balanceAggregateRows($filteredRevenues),
+            'incomeRowsPaid' => $this->balanceAggregateRows($paidRevenues),
+            'incomeRowsPending' => $this->balanceAggregateRows($pendingRevenues),
             'expenseRows' => $this->balanceAggregateRows($filteredExpenses),
         ];
     }
@@ -607,6 +622,13 @@ class FinancePageMetrics
         $id = $revenue->meta['linkedTransactionId'] ?? $revenue->meta['linked_transaction_id'] ?? null;
 
         return $id !== null && $id !== '' ? (string) $id : null;
+    }
+
+    private function isRevenuePaid(Revenue $revenue): bool
+    {
+        $status = $revenue->meta['paymentStatus'] ?? $revenue->meta['payment_status'] ?? 'paid';
+
+        return $status === 'paid' || $status === true || $status === 1 || $status === '1';
     }
 
     /**

@@ -39,7 +39,7 @@ class TeamSuiteBackupRestoreTest extends TestCase
         $this->assertSame('club-legacy-001', $parsed['sourceClubId']);
 
         $counts = $parser->countAppData($parsed['appDataByClub']['club-legacy-001']);
-        $this->assertSame(2, $counts['students']);
+        $this->assertSame(3, $counts['students']);
         $this->assertSame(3, $counts['clubMembers']);
         $this->assertSame(1, $counts['transactions']);
     }
@@ -91,8 +91,50 @@ class TeamSuiteBackupRestoreTest extends TestCase
         $parsed = app(TeamSuiteBackupParser::class)->parse($json);
         $counts = app(TeamSuiteBackupRestoreService::class)->restoreClub($parsed, 'merge');
 
-        $this->assertSame(2, $counts['students']);
-        $this->assertSame(2, Athlete::query()->withoutGlobalScopes()->where('club_id', 'club-legacy-001')->count());
+        $this->assertSame(3, $counts['students']);
+        $this->assertSame(1, $counts['activeAthletes']);
+        $this->assertSame(1, $counts['activeAthletesInBackup']);
+        $this->assertSame(1, $counts['deletedStudents']);
+        $this->assertSame(2, Athlete::query()->withoutGlobalScopes()
+            ->where('club_id', 'club-legacy-001')
+            ->whereNull('deleted_at')
+            ->count());
+        $this->assertSame(1, Athlete::query()->withoutGlobalScopes()->withTrashed()
+            ->where('club_id', 'club-legacy-001')
+            ->where('legacy_id', 'a3-deleted')
+            ->whereNotNull('deleted_at')
+            ->count());
+    }
+
+    public function test_restore_reconciles_stale_athlete_status_on_merge(): void
+    {
+        $club = Club::query()->create([
+            'id' => 'club-legacy-001',
+            'name' => 'Existing',
+            'slug' => 'existing',
+            'is_active' => true,
+        ]);
+
+        Athlete::query()->create([
+            'id' => (string) Str::uuid(),
+            'club_id' => $club->id,
+            'legacy_id' => 'a1',
+            'first_name' => 'Νίκος',
+            'last_name' => 'Δημητρίου',
+            'status' => 'inactive',
+        ]);
+
+        $json = file_get_contents(base_path('tests/fixtures/teamsuite-club-backup-minimal.json'));
+        $parsed = app(TeamSuiteBackupParser::class)->parse($json);
+        $counts = app(TeamSuiteBackupRestoreService::class)->restoreClub($parsed, 'merge');
+
+        $this->assertSame(1, $counts['activeAthletes']);
+        $athlete = Athlete::query()->withoutGlobalScopes()
+            ->where('club_id', 'club-legacy-001')
+            ->where('legacy_id', 'a1')
+            ->first();
+        $this->assertNotNull($athlete);
+        $this->assertSame('active', $athlete->status);
     }
 
     public function test_restore_normalizes_preferred_parent_email_from_teamsuite_camel_case(): void
@@ -406,7 +448,7 @@ class TeamSuiteBackupRestoreTest extends TestCase
         $response->assertRedirect(route('admin.settings.backup.index'));
         $response->assertSessionHas('backup_dry_run');
         $dryRun = session('backup_dry_run');
-        $this->assertSame(2, $dryRun['counts']['students']);
+        $this->assertSame(3, $dryRun['counts']['students']);
         $this->assertFalse($dryRun['clubExists']);
     }
 }

@@ -1541,8 +1541,18 @@ function BalancePanel({ balance, onApplyRange }) {
             </Card>
 
             <div id="balance-print-area" className="space-y-4">
-                <div className="balance-summary grid gap-3 md:grid-cols-3">
-                    <SummaryStatCard label="Έσοδα" value={`${euro(balance?.revenue)} €`} tone="positive" />
+                <div className="balance-summary grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                    <SummaryStatCard label="Έσοδα (σύνολο)" value={`${euro(balance?.revenue)} €`} tone="positive" />
+                    <SummaryStatCard
+                        label="Εξοφλημένα"
+                        value={`${euro(balance?.revenuePaid)} €`}
+                        tone="positive"
+                    />
+                    <SummaryStatCard
+                        label="Εκκρεμή"
+                        value={`${euro(balance?.revenuePending)} €`}
+                        tone={Number(balance?.revenuePending || 0) > 0 ? 'negative' : 'neutral'}
+                    />
                     <SummaryStatCard label="Έξοδα" value={`${euro(balance?.expense)} €`} tone="negative" />
                     <SummaryStatCard
                         label="Υπόλοιπο"
@@ -1555,7 +1565,7 @@ function BalancePanel({ balance, onApplyRange }) {
                     <p className="text-xs font-semibold uppercase tracking-wide text-ts-accent">
                         Report εισπράξεων
                     </p>
-                    <h4 className="mt-1 text-base font-semibold text-ts-fg">Ανά τρόπο πληρωμής</h4>
+                    <h4 className="mt-1 text-base font-semibold text-ts-fg">Ανά τρόπο πληρωμής (εξοφλημένα)</h4>
                     <p className="mb-3 text-xs text-ts-muted">{formatSeasonRange(balance?.from, balance?.to)}</p>
                     <DataTable
                         columns={[
@@ -1581,8 +1591,13 @@ function BalancePanel({ balance, onApplyRange }) {
                 </Card>
 
                 <BalanceBucketTable
-                    title="Έσοδα"
-                    rows={balance?.incomeRows || []}
+                    title="Έσοδα — Εξοφλημένα"
+                    rows={balance?.incomeRowsPaid || []}
+                    className="balance-table-block"
+                />
+                <BalanceBucketTable
+                    title="Έσοδα — Εκκρεμή"
+                    rows={balance?.incomeRowsPending || []}
                     className="balance-table-block"
                 />
                 <BalanceBucketTable

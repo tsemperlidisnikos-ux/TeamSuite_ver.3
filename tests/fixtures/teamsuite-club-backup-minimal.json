@@ -49,8 +49,10 @@
           "fatherFirstName": "Γιώργος",
           "motherFirstName": "Ελένη"
         },
-        { "id": "a2", "firstName": "Μαρία", "lastName": "Παπαδοπούλου", "status": "trial", "classId": "cl1", "classIds": ["cl1"], "preferredParentEmail": "mother", "motherEmail": "maria.mom@example.com" }
+        { "id": "a2", "firstName": "Μαρία", "lastName": "Παπαδοπούλου", "status": "trial", "classId": "cl1", "classIds": ["cl1"], "preferredParentEmail": "mother", "motherEmail": "maria.mom@example.com" },
+        { "id": "a3-deleted", "firstName": "Διαγραμμένος", "lastName": "Αθλητής", "status": "inactive", "classId": "cl1", "classIds": ["cl1"] }
       ],
+      "deletedStudentIds": ["a3-deleted"],
       "coaches": [{ "id": "c1" }],
       "classes": [{ "id": "cl1", "name": "U12", "sport": "Μπάσκετ" }],
       "schedule": [

@@ -387,6 +387,19 @@ class FinanceStubsTest extends TestCase
                 'paymentStatus' => 'paid',
             ],
         ]);
+        Revenue::query()->withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(),
+            'club_id' => $club->id,
+            'amount' => 50,
+            'category' => 'ΕΝΟΙΚΙΑΣΗ ΓΗΠΕΔΟΥ',
+            'occurred_on' => '2026-09-15',
+            'meta' => [
+                'date' => '2026-09-15',
+                'subcategory' => 'ΕΝΟΙΚΙΑΣΗ ΓΗΠΕΔΟΥ',
+                'paymentMethod' => 'cash',
+                'paymentStatus' => 'pending',
+            ],
+        ]);
 
         $this->actingAs($user)
             ->get(route('admin.finance.index', [
@@ -399,12 +412,17 @@ class FinanceStubsTest extends TestCase
                 ->component('Admin/Finance/Index')
                 ->where('balance.from', '2026-08-01')
                 ->where('balance.to', '2026-10-17')
-                ->where('balance.revenue', 170)
+                ->where('balance.revenue', 220)
+                ->where('balance.revenuePaid', 170)
+                ->where('balance.revenuePending', 50)
                 ->where('balance.collectionMethods.0.key', 'card')
                 ->where('balance.collectionMethods.0.amount', 35)
                 ->where('balance.collectionMethods.1.key', 'eurobank')
                 ->where('balance.collectionMethods.1.amount', 100)
-                ->has('balance.incomeRows', 2)
+                ->has('balance.incomeRows', 3)
+                ->has('balance.incomeRowsPaid', 2)
+                ->has('balance.incomeRowsPending', 1)
+                ->where('balance.incomeRowsPending.0.total', 50)
             );
     }
 
