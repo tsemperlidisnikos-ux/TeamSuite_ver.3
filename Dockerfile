@@ -33,6 +33,9 @@ FROM serversideup/php:8.3-fpm-nginx
 USER root
 WORKDIR /var/www/html
 
+# Laravel Number::format / money / locale helpers need intl (~40MB).
+RUN install-php-extensions intl
+
 # Laravel public webroot (critical).
 # File/sync drivers avoid HTTP 500 when Coolify DB link is briefly unavailable.
 ENV NGINX_WEBROOT=/var/www/html/public \
