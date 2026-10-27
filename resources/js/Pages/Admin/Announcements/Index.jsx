@@ -21,6 +21,8 @@ const emptyForm = () => ({
     sport: '',
     publish: true,
     send_email: true,
+    send_sms: false,
+    send_push: false,
     remove_image: false,
 });
 
@@ -290,6 +292,8 @@ export default function Index({
             sport: audience.sport || '',
             publish: item.is_published,
             send_email: false,
+            send_sms: false,
+            send_push: false,
             remove_image: false,
         });
         form.clearErrors();
@@ -334,16 +338,25 @@ export default function Index({
         e.preventDefault();
         const publish = asDraft ? false : !!form.data.publish;
         const sendEmail = publish && !!form.data.send_email;
+        const sendSms = publish && !!form.data.send_sms;
+        const sendPush = publish && !!form.data.send_push;
 
-        if (publish && sendEmail) {
+        if (publish && (sendEmail || sendSms || sendPush)) {
             const roleLabels = (form.data.roles || [])
                 .map((r) => roleOptions.find((o) => o.value === r)?.label || r)
                 .join(', ');
             const classCount = (form.data.class_ids || []).length;
             const sportBit = form.data.sport ? ` · Άθλημα: ${form.data.sport}` : '';
             const classBit = classCount ? ` · Τμήματα: ${classCount}` : '';
+            const channels = [
+                sendEmail ? 'email' : null,
+                sendSms ? 'SMS' : null,
+                sendPush ? 'push' : null,
+            ]
+                .filter(Boolean)
+                .join(' + ');
             const msg =
-                `Θα σταλεί email στους παραλήπτες του ακροατηρίου` +
+                `Θα σταλεί ${channels} στους παραλήπτες του ακροατηρίου` +
                 ` (${roleLabels || 'όλοι'}${sportBit}${classBit}).\nΣυνέχεια;`;
             if (!confirm(msg)) {
                 return;
@@ -355,6 +368,8 @@ export default function Index({
                 ...data,
                 publish: publish ? 1 : 0,
                 send_email: sendEmail ? 1 : 0,
+                send_sms: sendSms ? 1 : 0,
+                send_push: sendPush ? 1 : 0,
                 remove_image: data.remove_image ? 1 : 0,
                 class_ids: classesEnabled ? data.class_ids || [] : [],
             };
@@ -754,6 +769,24 @@ export default function Index({
                                 />
                                 Αποστολή και με email
                             </label>
+                            <label className="mt-2 flex items-center gap-2 text-sm text-ts-fg">
+                                <input
+                                    type="checkbox"
+                                    checked={!!form.data.send_sms}
+                                    disabled={!form.data.publish}
+                                    onChange={(e) => form.setData('send_sms', e.target.checked)}
+                                />
+                                Αποστολή και με SMS
+                            </label>
+                            <label className="mt-2 flex items-center gap-2 text-sm text-ts-fg">
+                                <input
+                                    type="checkbox"
+                                    checked={!!form.data.send_push}
+                                    disabled={!form.data.publish}
+                                    onChange={(e) => form.setData('send_push', e.target.checked)}
+                                />
+                                Αποστολή και με push
+                            </label>
                             {editingId && form.data.send_email ? (
                                 <p className="mt-1 text-xs text-ts-muted">
                                     Σε επεξεργασία πρέπει να ξανατσεκάρετε για επαναποστολή email.
@@ -762,6 +795,11 @@ export default function Index({
                             {(pageErrors.send_email || form.errors.send_email) && (
                                 <p className="mt-1 text-sm text-rose-600">
                                     {pageErrors.send_email || form.errors.send_email}
+                                </p>
+                            )}
+                            {(pageErrors.send_sms || form.errors.send_sms) && (
+                                <p className="mt-1 text-sm text-rose-600">
+                                    {pageErrors.send_sms || form.errors.send_sms}
                                 </p>
                             )}
                         </div>

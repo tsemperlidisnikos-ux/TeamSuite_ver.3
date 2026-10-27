@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Admin\Concerns\InteractsWithClubResource;
 use App\Http\Controllers\Controller;
 use App\Jobs\SendAnnouncementEmailsJob;
+use App\Jobs\SendAnnouncementPushJob;
+use App\Jobs\SendAnnouncementSmsJob;
 use App\Models\AcademyClass;
 use App\Models\Announcement;
 use App\Models\Athlete;
@@ -126,7 +128,11 @@ class AnnouncementController extends Controller
         $data = $this->validated($request);
         $audience = $this->audienceFrom($data);
         $emails = $this->resolveAudienceEmails($request, $audience);
+        $phones = $this->resolveAudiencePhones($request, $audience);
+        $pushUserIds = $this->resolveAudienceUserIds($request, $audience);
         $sendEmail = filter_var($data['send_email'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $sendSms = filter_var($data['send_sms'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $sendPush = filter_var($data['send_push'] ?? false, FILTER_VALIDATE_BOOLEAN);
         $publish = filter_var($data['publish'] ?? false, FILTER_VALIDATE_BOOLEAN);
 
         if ($publish && $sendEmail && $emails === []) {
@@ -134,9 +140,16 @@ class AnnouncementController extends Controller
                 'send_email' => 'Ενεργή «Αποστολή και με email», αλλά δεν βρέθηκαν παραλήπτες με email στο ακροατήριο.',
             ])->withInput();
         }
+        if ($publish && $sendSms && $phones === []) {
+            return back()->withErrors([
+                'send_sms' => 'Ενεργή «Αποστολή και με SMS», αλλά δεν βρέθηκαν τηλέφωνα στο ακροατήριο.',
+            ])->withInput();
+        }
 
         $meta = [
             'send_email' => $sendEmail,
+            'send_sms' => $sendSms,
+            'send_push' => $sendPush,
         ];
         $meta = $this->applyImageUpload($request, $meta);
 
@@ -158,15 +171,18 @@ class AnnouncementController extends Controller
             'announcement.create',
             'Δημιούργησε ανακοίνωση',
             sprintf(
-                '«%s» · %s%s',
+                '«%s» · %s%s%s%s',
                 $row->title,
                 $statusLabel,
-                $sendEmail && $emails !== [] ? ' · email σε '.count($emails).' παραλήπτες' : ''
+                $sendEmail && $emails !== [] ? ' · email σε '.count($emails).' παραλήπτες' : '',
+                $sendSms && $phones !== [] ? ' · SMS σε '.count($phones) : '',
+                $sendPush && $pushUserIds !== [] ? ' · push σε '.count($pushUserIds) : ''
             ),
             'announcement',
             $row->id,
         );
 
+        $queued = [];
         if ($publish && $sendEmail && $emails !== []) {
             SendAnnouncementEmailsJob::dispatch(
                 $clubId,
@@ -176,12 +192,28 @@ class AnnouncementController extends Controller
                 $emails,
                 $meta['image_path'] ?? null,
             );
+            $queued[] = 'email '.count($emails);
+        }
+        if ($publish && $sendSms && $phones !== []) {
+            SendAnnouncementSmsJob::dispatch($clubId, $row->id, $data['title'], $data['body'], $phones);
+            $queued[] = 'SMS '.count($phones);
+        }
+        if ($publish && $sendPush && $pushUserIds !== []) {
+            SendAnnouncementPushJob::dispatch(
+                $clubId,
+                $row->id,
+                $data['title'],
+                $data['body'],
+                $pushUserIds,
+                route('admin.announcements.index'),
+            );
+            $queued[] = 'push '.count($pushUserIds);
+        }
 
-            $count = count($emails);
-
+        if ($queued !== []) {
             return back()->with(
                 'success',
-                "Η ανακοίνωση δημοσιεύτηκε. Email σε ουρά για {$count} παραλήπτη/ες."
+                'Η ανακοίνωση δημοσιεύτηκε. Ουρά: '.implode(', ', $queued).'.'
             );
         }
 
@@ -197,19 +229,32 @@ class AnnouncementController extends Controller
         $row = $this->clubQuery(Announcement::class, $request)->findOrFail($id);
         $audience = $this->audienceFrom($data);
         $sendEmail = filter_var($data['send_email'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $sendSms = filter_var($data['send_sms'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $sendPush = filter_var($data['send_push'] ?? false, FILTER_VALIDATE_BOOLEAN);
         $publish = array_key_exists('publish', $data)
             ? filter_var($data['publish'], FILTER_VALIDATE_BOOLEAN)
             : ($row->published_at !== null);
 
         $emails = $this->resolveAudienceEmails($request, $audience);
+        $phones = $this->resolveAudiencePhones($request, $audience);
+        $pushUserIds = $this->resolveAudienceUserIds($request, $audience);
 
         if ($publish && $sendEmail && $emails === []) {
             return back()->withErrors([
                 'send_email' => 'Ενεργή «Αποστολή και με email», αλλά δεν βρέθηκαν παραλήπτες με email στο ακροατήριο.',
             ])->withInput();
         }
+        if ($publish && $sendSms && $phones === []) {
+            return back()->withErrors([
+                'send_sms' => 'Ενεργή «Αποστολή και με SMS», αλλά δεν βρέθηκαν τηλέφωνα στο ακροατήριο.',
+            ])->withInput();
+        }
 
-        $meta = array_merge($row->meta ?? [], ['send_email' => $sendEmail]);
+        $meta = array_merge($row->meta ?? [], [
+            'send_email' => $sendEmail,
+            'send_sms' => $sendSms,
+            'send_push' => $sendPush,
+        ]);
         $meta = $this->applyImageUpload($request, $meta);
 
         $row->fill([
@@ -243,20 +288,38 @@ class AnnouncementController extends Controller
             $row->id,
         );
 
+        $clubId = $this->clubId($request);
+        $queued = [];
         if ($publish && $sendEmail && $emails !== []) {
             SendAnnouncementEmailsJob::dispatch(
-                $this->clubId($request),
+                $clubId,
                 $row->id,
                 $data['title'],
                 $data['body'],
                 $emails,
                 $meta['image_path'] ?? null,
             );
-            $count = count($emails);
-
+            $queued[] = 'email '.count($emails);
+        }
+        if ($publish && $sendSms && $phones !== []) {
+            SendAnnouncementSmsJob::dispatch($clubId, $row->id, $data['title'], $data['body'], $phones);
+            $queued[] = 'SMS '.count($phones);
+        }
+        if ($publish && $sendPush && $pushUserIds !== []) {
+            SendAnnouncementPushJob::dispatch(
+                $clubId,
+                $row->id,
+                $data['title'],
+                $data['body'],
+                $pushUserIds,
+                route('admin.announcements.index'),
+            );
+            $queued[] = 'push '.count($pushUserIds);
+        }
+        if ($queued !== []) {
             return back()->with(
                 'success',
-                "Η ανακοίνωση ενημερώθηκε. Email σε ουρά για {$count} παραλήπτη/ες."
+                'Η ανακοίνωση ενημερώθηκε. Ουρά: '.implode(', ', $queued).'.'
             );
         }
 
@@ -356,6 +419,8 @@ class AnnouncementController extends Controller
             'sport' => ['nullable', 'string', 'max:120'],
             'publish' => ['boolean'],
             'send_email' => ['boolean'],
+            'send_sms' => ['boolean'],
+            'send_push' => ['boolean'],
             'image' => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
             'remove_image' => ['sometimes', 'nullable'],
         ]);
@@ -610,6 +675,73 @@ class AnnouncementController extends Controller
         }
 
         return array_keys($emails);
+    }
+
+    /**
+     * @param  array{roles?: list<string>, class_ids?: list<string>, sport?: string, athlete_ids?: list<string>}  $audience
+     * @return list<string>
+     */
+    private function resolveAudiencePhones(Request $request, array $audience): array
+    {
+        $phones = [];
+        $add = function (?string $phone) use (&$phones): void {
+            $phone = preg_replace('/\s+/', '', trim((string) $phone)) ?? '';
+            if (strlen($phone) >= 8) {
+                $phones[$phone] = true;
+            }
+        };
+
+        $roles = $audience['roles'] ?? [];
+        if ($roles === [] || in_array('parent', $roles, true) || in_array('athlete', $roles, true)) {
+            foreach ($this->scopedAthletes($request, $audience)->get(['phone', 'guardian_phone', 'mother_phone', 'emergency_phone']) as $athlete) {
+                $add($athlete->phone);
+                $add($athlete->guardian_phone);
+                $add($athlete->mother_phone);
+                $add($athlete->emergency_phone);
+            }
+        }
+        if (in_array('coach', $roles, true)) {
+            $this->clubQuery(Coach::class, $request)->where('is_active', true)->pluck('phone')
+                ->each(fn ($phone) => $add(is_string($phone) ? $phone : null));
+        }
+        if (in_array('staff', $roles, true)) {
+            $this->clubQuery(StaffMember::class, $request)->where('is_active', true)->pluck('phone')
+                ->each(fn ($phone) => $add(is_string($phone) ? $phone : null));
+        }
+
+        return array_keys($phones);
+    }
+
+    /**
+     * @param  array{roles?: list<string>, parent_ids?: list<string>}  $audience
+     * @return list<int>
+     */
+    private function resolveAudienceUserIds(Request $request, array $audience): array
+    {
+        $roles = $audience['roles'] ?? [];
+        $ids = [];
+
+        if ($roles === [] || in_array('parent', $roles, true)) {
+            $parentIds = array_values($audience['parent_ids'] ?? []);
+            if ($parentIds !== []) {
+                foreach ($parentIds as $id) {
+                    $ids[(int) $id] = true;
+                }
+            } else {
+                ParentAthleteLink::query()
+                    ->withoutGlobalScopes()
+                    ->where('club_id', $this->clubId($request))
+                    ->where('receives_push', true)
+                    ->pluck('parent_user_id')
+                    ->each(function ($id) use (&$ids) {
+                        if ($id) {
+                            $ids[(int) $id] = true;
+                        }
+                    });
+            }
+        }
+
+        return array_map('intval', array_keys($ids));
     }
 
     /**

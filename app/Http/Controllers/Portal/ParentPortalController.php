@@ -7,10 +7,12 @@ use App\Models\Announcement;
 use App\Models\Athlete;
 use App\Models\AthleteTransaction;
 use App\Models\Attendance;
+use App\Models\ClubSetting;
 use App\Models\Facility;
 use App\Models\ParentAthleteLink;
 use App\Models\SportMatch;
 use App\Models\Training;
+use App\Services\Payments\OnlineCheckoutService;
 use App\Support\Roles;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -21,6 +23,10 @@ use Inertia\Response;
 
 class ParentPortalController extends Controller
 {
+    public function __construct(
+        private readonly OnlineCheckoutService $checkouts,
+    ) {}
+
     public function index(Request $request): Response
     {
         $user = $request->user();
@@ -75,6 +81,10 @@ class ParentPortalController extends Controller
         $totalBalance = $balances->sum(fn (array $row) => max(0, (float) $row['balance']));
         $paymentHistory = $this->paymentHistory($athleteIds);
         $recentAttendance = $this->recentAttendance($athleteIds, $athletes);
+        $settings = $clubId
+            ? ClubSetting::query()->where('club_id', $clubId)->first()
+            : null;
+        $readyProviders = $this->checkouts->readyProviders($settings);
 
         $announcements = $clubId
             ? Announcement::query()->withoutGlobalScopes()
@@ -111,6 +121,8 @@ class ParentPortalController extends Controller
                 'next_match' => $matches->first(),
             ],
             'balances' => $balances->values(),
+            'readyProviders' => $readyProviders,
+            'checkoutUrl' => route('portal.parent.checkout'),
             'trainings' => $trainings->values(),
             'matches' => $matches->values(),
             'recent_attendance' => $recentAttendance->values(),

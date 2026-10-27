@@ -44,6 +44,8 @@ export default function ParentHome({
     announcements = [],
     summary = {},
     balances = [],
+    readyProviders = [],
+    checkoutUrl = '/app/parent/checkout',
     trainings = [],
     matches = [],
     recent_attendance = [],
@@ -59,6 +61,60 @@ export default function ParentHome({
     const [absenceNotes, setAbsenceNotes] = useState('');
     const [absenceBusy, setAbsenceBusy] = useState(false);
     const [absenceMsg, setAbsenceMsg] = useState('');
+    const [payBusyId, setPayBusyId] = useState('');
+    const [payMsg, setPayMsg] = useState('');
+
+    async function startCheckout(athleteId, providerId, amount) {
+        setPayMsg('');
+        setPayBusyId(`${athleteId}:${providerId}`);
+        try {
+            const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+            const res = await fetch(checkoutUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': csrf || '',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    athlete_id: athleteId,
+                    provider: providerId,
+                    amount,
+                }),
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok || !json?.ok) {
+                throw new Error(json?.error || 'Αποτυχία έναρξης πληρωμής');
+            }
+            if (json.method === 'POST' && json.fields && json.checkoutUrl) {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = json.checkoutUrl;
+                form.style.display = 'none';
+                Object.entries(json.fields).forEach(([key, value]) => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = key;
+                    input.value = String(value ?? '');
+                    form.appendChild(input);
+                });
+                document.body.appendChild(form);
+                form.submit();
+                return;
+            }
+            if (json.checkoutUrl) {
+                window.location.href = json.checkoutUrl;
+                return;
+            }
+            throw new Error('Λείπει το URL πληρωμής');
+        } catch (err) {
+            setPayMsg(err?.message || 'Σφάλμα πληρωμής');
+        } finally {
+            setPayBusyId('');
+        }
+    }
 
     const athleteNameById = useMemo(() => {
         const map = new Map();
@@ -396,14 +452,52 @@ export default function ParentHome({
                                         label: 'Υπόλοιπο',
                                         render: (r) => <BalanceBadge amount={r.balance} />,
                                     },
+                                    {
+                                        key: 'pay',
+                                        label: 'Πληρωμή',
+                                        render: (r) => {
+                                            const due = Number(r.balance || 0);
+                                            if (due < 0.3 || readyProviders.length === 0) {
+                                                return <span className="text-xs text-ts-muted">—</span>;
+                                            }
+                                            return (
+                                                <div className="flex flex-wrap gap-1">
+                                                    {readyProviders.map((p) => {
+                                                        const busy = payBusyId === `${r.athlete_id}:${p.id}`;
+                                                        return (
+                                                            <button
+                                                                key={p.id}
+                                                                type="button"
+                                                                disabled={!!payBusyId}
+                                                                onClick={() =>
+                                                                    startCheckout(r.athlete_id, p.id, due)
+                                                                }
+                                                                className="rounded-md bg-ts-primary px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+                                                            >
+                                                                {busy ? '…' : p.label}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            );
+                                        },
+                                    },
                                 ]}
                                 rows={balances.map((b) => ({ ...b, id: b.athlete_id }))}
                             />
-                            <p className="mt-3 text-xs text-ts-muted">
-                                Δεν υπάρχουν ανοιχτές χρεώσεις ανά μήνα. Η online πληρωμή θα εμφανιστεί όταν
-                                ο διαχειριστής πλατφόρμας επιτρέψει πάροχο (Viva / Eurobank / Stripe) και ο
-                                σύλλογος τον ενεργοποιήσει στις Ρυθμίσεις.
-                            </p>
+                            {payMsg ? (
+                                <p className="mt-3 text-xs text-red-600">{payMsg}</p>
+                            ) : null}
+                            {readyProviders.length === 0 ? (
+                                <p className="mt-3 text-xs text-ts-muted">
+                                    Η online πληρωμή θα εμφανιστεί όταν ο σύλλογος ενεργοποιήσει Viva /
+                                    Stripe / Eurobank στις Ρυθμίσεις → Πληρωμές.
+                                </p>
+                            ) : (
+                                <p className="mt-3 text-xs text-ts-muted">
+                                    Επιλέξτε πάροχο για να πληρώσετε το ανοιχτό υπόλοιπο.
+                                </p>
+                            )}
                         </PortalPanel>
 
                         <PortalPanel title="Αποδείξεις είσπραξης" icon="🧾">

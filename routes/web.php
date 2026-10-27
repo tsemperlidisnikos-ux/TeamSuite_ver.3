@@ -27,18 +27,20 @@ use App\Http\Controllers\Admin\StaffMemberController;
 use App\Http\Controllers\Admin\TrainingController;
 use App\Http\Controllers\Admin\TransactionController;
 use App\Http\Controllers\Admin\WarehouseController;
+use App\Http\Controllers\Platform\ClubActivityLogController;
 use App\Http\Controllers\Platform\ClubController as PlatformClubController;
 use App\Http\Controllers\Platform\DashboardController as PlatformDashboardController;
 use App\Http\Controllers\Platform\LicensePackageController;
 use App\Http\Controllers\Platform\LoginActivityController;
-use App\Http\Controllers\Platform\ClubActivityLogController;
 use App\Http\Controllers\Platform\PlatformBackupController;
 use App\Http\Controllers\Platform\PlatformSettingsController;
 use App\Http\Controllers\Platform\PlatformUserController;
 use App\Http\Controllers\Platform\WaitlistController;
 use App\Http\Controllers\Portal\AthletePortalController;
 use App\Http\Controllers\Portal\CoachPortalController;
+use App\Http\Controllers\Portal\OnlineCheckoutController;
 use App\Http\Controllers\Portal\ParentPortalController;
+use App\Http\Controllers\Portal\PushSubscriptionController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Public\AthleteIdCardController;
 use App\Http\Controllers\Site\JoinController;
@@ -293,6 +295,15 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/app/parent', [ParentPortalController::class, 'index'])->name('portal.parent');
     Route::post('/app/parent/absence', [ParentPortalController::class, 'submitAbsence'])->name('portal.parent.absence');
+    Route::post('/app/parent/checkout', [OnlineCheckoutController::class, 'store'])
+        ->middleware('throttle:20,1')
+        ->name('portal.parent.checkout');
+    Route::get('/push/vapid', [PushSubscriptionController::class, 'vapid'])
+        ->name('push.vapid');
+    Route::post('/push/subscribe', [PushSubscriptionController::class, 'subscribe'])
+        ->name('push.subscribe');
+    Route::post('/push/unsubscribe', [PushSubscriptionController::class, 'unsubscribe'])
+        ->name('push.unsubscribe');
     Route::get('/app/coach', [CoachPortalController::class, 'index'])->name('portal.coach');
     Route::post('/app/coach/attendance', [CoachPortalController::class, 'saveAttendance'])->name('portal.coach.attendance');
     Route::get('/app/athlete', AthletePortalController::class)->name('portal.athlete');
