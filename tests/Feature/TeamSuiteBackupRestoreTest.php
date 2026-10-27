@@ -21,6 +21,7 @@ use App\Services\Backup\TeamSuiteBackupRestoreService;
 use App\Support\PreferredNotifyEmail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -57,6 +58,24 @@ class TeamSuiteBackupRestoreTest extends TestCase
         $this->assertNotNull($club->settings);
         $this->assertNotNull($club->license_package_id);
         $this->assertSame(1000, (int) $club->licensePackage?->athlete_cap);
+    }
+
+    public function test_ensure_club_persists_encrypted_smtp_as_ciphertext(): void
+    {
+        $json = file_get_contents(base_path('tests/fixtures/teamsuite-club-backup-minimal.json'));
+        $parsed = app(TeamSuiteBackupParser::class)->parse($json);
+        $club = app(TeamSuiteBackupRestoreService::class)->ensureClubFromPayload($parsed);
+
+        $settings = $club->fresh('settings')->settings;
+        $this->assertSame('smtp.example.com', $settings->smtp['host'] ?? null);
+
+        $raw = DB::table('club_settings')
+            ->where('club_id', $club->id)
+            ->value('smtp');
+
+        $this->assertIsString($raw);
+        $this->assertStringNotContainsString('smtp.example.com', $raw);
+        $this->assertNull(json_decode($raw), 'encrypted smtp must not be stored as a JSON document');
     }
 
     public function test_restore_preserves_existing_secrets_when_incoming_masked(): void

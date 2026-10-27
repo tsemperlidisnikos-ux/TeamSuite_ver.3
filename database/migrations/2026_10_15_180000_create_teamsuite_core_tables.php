@@ -34,12 +34,13 @@ return new class extends Migration
         Schema::create('club_settings', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->foreignUuid('club_id')->unique()->constrained('clubs')->cascadeOnDelete();
-            $table->json('smtp')->nullable();
-            $table->json('sms')->nullable();
-            $table->json('push')->nullable();
-            $table->json('viva')->nullable();
-            $table->json('stripe')->nullable();
-            $table->json('eurobank')->nullable();
+            // encrypted:array stores ciphertext — MySQL JSON columns reject that.
+            $table->longText('smtp')->nullable();
+            $table->longText('sms')->nullable();
+            $table->longText('push')->nullable();
+            $table->longText('viva')->nullable();
+            $table->longText('stripe')->nullable();
+            $table->longText('eurobank')->nullable();
             $table->boolean('public_join_enabled')->default(true);
             $table->boolean('public_rent_enabled')->default(false);
             $table->longText('terms_of_use_html')->nullable();
