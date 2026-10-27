@@ -7,6 +7,7 @@ use App\Models\Athlete;
 use App\Models\Club;
 use App\Models\LicensePackage;
 use App\Models\PlatformWaitlist;
+use App\Services\Hosting\HostingCostService;
 use App\Services\Platform\PlatformConfigService;
 use App\Support\Navigation;
 use Illuminate\Http\Request;
@@ -15,7 +16,7 @@ use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function __invoke(Request $request, PlatformConfigService $config): Response
+    public function __invoke(Request $request, PlatformConfigService $config, HostingCostService $hosting): Response
     {
         abort_unless($request->user()?->is_platform_admin, 403);
 
@@ -43,7 +44,8 @@ class DashboardController extends Controller
             'activePreview' => $activePreview
                 ? ['id' => $activePreview['id'], 'name' => $activePreview['name']]
                 : null,
-            'platformConfig' => $config->get(),
+            'platformConfig' => $this->configForInertia($config->get()),
+            'hostingCost' => $hosting->snapshot(),
             'catalogs' => [
                 'academyModules' => Navigation::academyModules(),
                 'financeTabs' => $config->financeTabsCatalog(),
@@ -51,5 +53,19 @@ class DashboardController extends Controller
                 'roleLabels' => $config->roleLabels(),
             ],
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     * @return array<string, mixed>
+     */
+    private function configForInertia(array $config): array
+    {
+        if (isset($config['hostingBilling']) && is_array($config['hostingBilling'])) {
+            $token = (string) ($config['hostingBilling']['hetzner_api_token'] ?? '');
+            $config['hostingBilling']['hetzner_api_token'] = $token !== '' ? '********' : '';
+        }
+
+        return $config;
     }
 }

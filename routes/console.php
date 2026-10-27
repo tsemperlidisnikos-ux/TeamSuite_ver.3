@@ -1,5 +1,6 @@
 <?php
 
+use App\Jobs\CheckHostingBalanceJob;
 use App\Jobs\ClubBackupJob;
 use App\Jobs\GdprRetentionJob;
 use App\Jobs\GenerateFeeChargesJob;
@@ -18,3 +19,4 @@ Schedule::job(new HealthCardNoticeJob)->dailyAt('07:00');
 Schedule::job(new WarehouseLowStockJob)->dailyAt('08:00');
 Schedule::job(new GdprRetentionJob)->dailyAt('03:30');
 Schedule::job(new ClubBackupJob)->dailyAt('02:00')->withoutOverlapping(120);
+Schedule::job(new CheckHostingBalanceJob)->dailyAt('09:00')->withoutOverlapping();

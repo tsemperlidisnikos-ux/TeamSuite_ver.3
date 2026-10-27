@@ -21,6 +21,7 @@ const NAV = {
                     { id: 'club-log', label: 'Ημερολόγιο συλλόγου', hint: 'Κινήσεις ανά ημέρα' },
                     { id: 'jpegs', label: 'Φόρμες δημόσιας εγγραφής', hint: 'URL / εγγραφές' },
                     { id: 'health-cards', label: 'Κάρτες υγείας ανά άθλημα', hint: 'PDF προτύπου' },
+                    { id: 'hosting', label: 'Κόστος hosting (Hetzner)', hint: 'Εκτίμηση / υπόλοιπο / ειδοποίηση' },
                 ],
             },
             {
@@ -196,6 +197,7 @@ export default function Dashboard({
     platformConfig,
     catalogs,
     activePreview = null,
+    hostingCost = null,
 }) {
     const page = usePage();
     const initial = initialNav(page.url);
@@ -210,6 +212,26 @@ export default function Dashboard({
     const [newDesc, setNewDesc] = useState('');
 
     const form = useForm({ ...platformConfig });
+    const hostingForm = useForm({
+        monthly_estimate_eur: hostingCost?.monthly_estimate_eur ?? 7.5,
+        prepaid_balance_eur: hostingCost?.prepaid_balance_eur ?? '',
+        low_balance_threshold_eur: hostingCost?.low_balance_threshold_eur ?? 15,
+        notify_email: hostingCost?.notify_email ?? '',
+        hetzner_api_token: '',
+        notes: hostingCost?.notes ?? '',
+    });
+
+    useEffect(() => {
+        hostingForm.setData({
+            monthly_estimate_eur: hostingCost?.monthly_estimate_eur ?? 7.5,
+            prepaid_balance_eur: hostingCost?.prepaid_balance_eur ?? '',
+            low_balance_threshold_eur: hostingCost?.low_balance_threshold_eur ?? 15,
+            notify_email: hostingCost?.notify_email ?? '',
+            hetzner_api_token: '',
+            notes: hostingCost?.notes ?? '',
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [hostingCost]);
 
     useEffect(() => {
         form.setData({ ...platformConfig });
@@ -246,6 +268,15 @@ export default function Dashboard({
     return (
         <PlatformLayout title="Διαχείριση" activeNav="manage">
             <Head title="Διαχείριση πλατφόρμας" />
+
+            {hostingCost?.needs_topup ? (
+                <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                    <strong>Χαμηλό υπόλοιπο Hetzner:</strong> {hostingCost.status_label}. Υπόλοιπο €
+                    {Number(hostingCost.remaining_eur || 0).toFixed(2)} · εκτίμηση €
+                    {Number(hostingCost.monthly_estimate_eur || 0).toFixed(2)}/μήνα. Πρόσθεσε χρήματα στο
+                    Hetzner Billing και ενημέρωσε το υπόλοιπο στο «Κόστος hosting».
+                </div>
+            ) : null}
 
             <div className="mb-4 flex flex-wrap gap-2">
                 {TABS.map((t) => (
@@ -381,6 +412,179 @@ export default function Dashboard({
                                 body="Ρυθμίσεις φόρμας δημόσιας εγγραφής ανά ενεργό σύλλογο."
                             />
                         )}
+                        {activeItem?.id === 'hosting' && (
+                            <section className="space-y-4 rounded-xl border border-ts-border bg-ts-surface p-4">
+                                <div>
+                                    <h2 className="text-lg font-semibold text-ts-fg">Κόστος hosting (Hetzner)</h2>
+                                    <p className="mt-1 text-sm text-ts-muted">
+                                        Δεν χρειάζεται επιπλέον υπηρεσία για να τρέχει η εφαρμογή. Το πάγιο είναι το
+                                        VPS (~€7–10/μήνα). Το Hetzner API δεν δίνει υπόλοιπο λογαριασμού — καταχώρησε
+                                        το υπόλοιπο χειροκίνητα μετά από top-up/τιμολόγιο.
+                                    </p>
+                                </div>
+
+                                <div
+                                    className={`rounded-lg border px-3 py-2 text-sm ${
+                                        hostingCost?.status === 'low'
+                                            ? 'border-amber-300 bg-amber-50 text-amber-950'
+                                            : hostingCost?.status === 'unknown'
+                                              ? 'border-ts-border bg-ts-bg text-ts-fg-soft'
+                                              : 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                                    }`}
+                                >
+                                    {hostingCost?.status_label || '—'}
+                                </div>
+
+                                <dl className="grid gap-3 sm:grid-cols-3">
+                                    <div className="rounded-lg border border-ts-border bg-ts-bg p-3">
+                                        <dt className="text-xs text-ts-muted">Μηνιαία εκτίμηση</dt>
+                                        <dd className="text-lg font-semibold">
+                                            €{Number(hostingCost?.monthly_estimate_eur || 0).toFixed(2)}
+                                        </dd>
+                                        <dd className="text-[11px] text-ts-muted">
+                                            {hostingCost?.estimated_from_api
+                                                ? 'Από Hetzner API'
+                                                : 'Χειροκίνητη / προεπιλογή'}
+                                        </dd>
+                                    </div>
+                                    <div className="rounded-lg border border-ts-border bg-ts-bg p-3">
+                                        <dt className="text-xs text-ts-muted">Καταχωρημένο υπόλοιπο</dt>
+                                        <dd className="text-lg font-semibold">
+                                            {hostingCost?.remaining_eur == null
+                                                ? '—'
+                                                : `€${Number(hostingCost.remaining_eur).toFixed(2)}`}
+                                        </dd>
+                                    </div>
+                                    <div className="rounded-lg border border-ts-border bg-ts-bg p-3">
+                                        <dt className="text-xs text-ts-muted">Ημέρες περίπου</dt>
+                                        <dd className="text-lg font-semibold">
+                                            {hostingCost?.days_remaining ?? '—'}
+                                        </dd>
+                                    </div>
+                                </dl>
+
+                                {hostingCost?.api_servers?.length ? (
+                                    <div className="rounded-lg border border-ts-border bg-ts-bg p-3 text-sm">
+                                        <div className="mb-1 font-medium">Servers (API)</div>
+                                        <ul className="space-y-1 text-ts-fg-soft">
+                                            {hostingCost.api_servers.map((s) => (
+                                                <li key={`${s.name}-${s.type}`}>
+                                                    {s.name} · {s.type} · €{Number(s.monthly_eur).toFixed(2)}/μήνα
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                ) : null}
+
+                                <form
+                                    className="space-y-3"
+                                    onSubmit={(e) => {
+                                        e.preventDefault();
+                                        hostingForm.post(route('platform.hosting.update'), {
+                                            preserveScroll: true,
+                                        });
+                                    }}
+                                >
+                                    <div className="grid gap-3 sm:grid-cols-2">
+                                        <label className="block text-sm">
+                                            <span className="mb-1 block text-ts-muted">Μηνιαία εκτίμηση (€)</span>
+                                            <input
+                                                className={field}
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                value={hostingForm.data.monthly_estimate_eur}
+                                                onChange={(e) =>
+                                                    hostingForm.setData(
+                                                        'monthly_estimate_eur',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                            />
+                                        </label>
+                                        <label className="block text-sm">
+                                            <span className="mb-1 block text-ts-muted">
+                                                Υπόλοιπο λογαριασμού Hetzner (€)
+                                            </span>
+                                            <input
+                                                className={field}
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                placeholder="π.χ. 50"
+                                                value={hostingForm.data.prepaid_balance_eur}
+                                                onChange={(e) =>
+                                                    hostingForm.setData(
+                                                        'prepaid_balance_eur',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                            />
+                                        </label>
+                                        <label className="block text-sm">
+                                            <span className="mb-1 block text-ts-muted">Όριο ειδοποίησης (€)</span>
+                                            <input
+                                                className={field}
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                value={hostingForm.data.low_balance_threshold_eur}
+                                                onChange={(e) =>
+                                                    hostingForm.setData(
+                                                        'low_balance_threshold_eur',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                            />
+                                        </label>
+                                        <label className="block text-sm">
+                                            <span className="mb-1 block text-ts-muted">Email ειδοποίησης</span>
+                                            <input
+                                                className={field}
+                                                type="email"
+                                                placeholder="tsemperlidis.nikos@gmail.com"
+                                                value={hostingForm.data.notify_email}
+                                                onChange={(e) =>
+                                                    hostingForm.setData('notify_email', e.target.value)
+                                                }
+                                            />
+                                        </label>
+                                    </div>
+                                    <label className="block text-sm">
+                                        <span className="mb-1 block text-ts-muted">
+                                            Hetzner Cloud API token (προαιρετικό, για αυτόματη εκτίμηση)
+                                        </span>
+                                        <input
+                                            className={field}
+                                            type="password"
+                                            autoComplete="off"
+                                            placeholder={
+                                                hostingCost?.hetzner_api_token_set
+                                                    ? '******** (αποθηκευμένο)'
+                                                    : 'Project API token'
+                                            }
+                                            value={hostingForm.data.hetzner_api_token}
+                                            onChange={(e) =>
+                                                hostingForm.setData('hetzner_api_token', e.target.value)
+                                            }
+                                        />
+                                    </label>
+                                    <label className="block text-sm">
+                                        <span className="mb-1 block text-ts-muted">Σημειώσεις</span>
+                                        <textarea
+                                            className={field}
+                                            rows={3}
+                                            value={hostingForm.data.notes}
+                                            onChange={(e) => hostingForm.setData('notes', e.target.value)}
+                                        />
+                                    </label>
+                                    <button type="submit" className={btn} disabled={hostingForm.processing}>
+                                        Αποθήκευση κόστους hosting
+                                    </button>
+                                </form>
+                            </section>
+                        )}
+
                         {activeItem?.id === 'health-cards' && (
                             <Panel>
                                 <p className="mb-3 text-sm text-ts-muted">

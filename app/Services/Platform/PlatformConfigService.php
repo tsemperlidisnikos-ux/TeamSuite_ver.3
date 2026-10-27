@@ -33,6 +33,17 @@ class PlatformConfigService
             'expenseDescriptions' => [],
             'seasons' => ['2025-2026', '2026-2027'],
             'healthCardTemplatesBySport' => [],
+            'hostingBilling' => [
+                'provider' => 'hetzner',
+                'monthly_estimate_eur' => 7.5,
+                'prepaid_balance_eur' => null,
+                'low_balance_threshold_eur' => 15,
+                'notify_email' => null,
+                'hetzner_api_token' => '',
+                'notes' => 'CX23 ≈ €6–8/μήνα + domain. Δεν χρειάζεται επιπλέον υπηρεσία για να τρέχει η εφαρμογή.',
+                'last_topup_at' => null,
+                'last_notified_at' => null,
+            ],
         ];
     }
 

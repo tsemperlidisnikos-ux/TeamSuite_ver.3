@@ -33,6 +33,7 @@ use App\Http\Controllers\Platform\DashboardController as PlatformDashboardContro
 use App\Http\Controllers\Platform\LicensePackageController;
 use App\Http\Controllers\Platform\LoginActivityController;
 use App\Http\Controllers\Platform\PlatformBackupController;
+use App\Http\Controllers\Platform\PlatformHostingController;
 use App\Http\Controllers\Platform\PlatformSettingsController;
 use App\Http\Controllers\Platform\PlatformUserController;
 use App\Http\Controllers\Platform\WaitlistController;
@@ -268,6 +269,8 @@ Route::middleware(['auth', 'verified', 'platform'])->prefix('platform')->name('p
     Route::get('/', PlatformDashboardController::class)->name('dashboard');
     Route::get('/backup/download', [PlatformBackupController::class, 'download'])->name('backup.download');
     Route::post('/settings', [PlatformSettingsController::class, 'update'])->name('settings.update');
+    Route::post('/hosting', [PlatformHostingController::class, 'update'])
+        ->name('hosting.update');
     Route::get('/users', [PlatformUserController::class, 'index'])->name('users.index');
     Route::post('/users', [PlatformUserController::class, 'store'])->name('users.store');
     Route::post('/users/enter', [PlatformUserController::class, 'enter'])->name('users.enter');
