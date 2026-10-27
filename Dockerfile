@@ -45,7 +45,9 @@ ENV NGINX_WEBROOT=/var/www/html/public \
     HEALTHCHECK_PATH=/up \
     SESSION_DRIVER=file \
     CACHE_STORE=file \
-    QUEUE_CONNECTION=sync
+    QUEUE_CONNECTION=sync \
+    PHP_MAX_EXECUTION_TIME=1800 \
+    NGINX_FASTCGI_TIMEOUT=1800s
 
 COPY --chown=www-data:www-data . /var/www/html
 COPY --from=vendor --chown=www-data:www-data /var/www/html/vendor /var/www/html/vendor

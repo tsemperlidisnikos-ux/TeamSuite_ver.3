@@ -1033,6 +1033,11 @@ class TeamSuiteAppDataImporter
                 continue;
             }
 
+            // resolveMap may return a bare UUID that was never imported (skipped/deleted athlete).
+            if (! Athlete::query()->withoutGlobalScopes()->withTrashed()->whereKey($athleteId)->exists()) {
+                continue;
+            }
+
             $userId = $this->resolveUserId($row['userId'] ?? $row['byUserId'] ?? null);
             $changes = $row['changes'] ?? null;
 
@@ -1990,11 +1995,7 @@ class TeamSuiteAppDataImporter
             return $this->idMaps[$bucket][$key];
         }
 
-        if (Str::isUuid($key)) {
-            return $key;
-        }
-
-        // Fallback: already-imported rows (merge / prior batch) by legacy_id
+        // Fallback: already-imported rows (merge / prior batch) by legacy_id / id
         $modelClass = match ($bucket) {
             'students' => Athlete::class,
             'classes' => AcademyClass::class,
@@ -2012,12 +2013,24 @@ class TeamSuiteAppDataImporter
         };
 
         if ($modelClass) {
-            $found = $modelClass::query()->withoutGlobalScopes()
-                ->where('legacy_id', $key)
-                ->value('id');
-            if ($found) {
-                return $this->idMaps[$bucket][$key] = $found;
+            $query = $modelClass::query()->withoutGlobalScopes();
+            if (in_array(SoftDeletes::class, class_uses_recursive($modelClass), true)) {
+                $query->withTrashed();
             }
+
+            $found = (clone $query)->where('legacy_id', $key)->value('id');
+            if (! $found && Str::isUuid($key)) {
+                $found = (clone $query)->whereKey($key)->value('id');
+            }
+            if ($found) {
+                return $this->idMaps[$bucket][$key] = (string) $found;
+            }
+
+            return null;
+        }
+
+        if (Str::isUuid($key)) {
+            return $key;
         }
 
         return null;

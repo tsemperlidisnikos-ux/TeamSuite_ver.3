@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\AcademyClass;
 use App\Models\Announcement;
 use App\Models\Athlete;
+use App\Models\AthleteChangeLog;
 use App\Models\AthleteTransaction;
 use App\Models\Attendance;
 use App\Models\Club;
@@ -16,6 +17,7 @@ use App\Models\ScheduleSlot;
 use App\Models\SizeChart;
 use App\Models\Training;
 use App\Models\User;
+use App\Services\Backup\TeamSuiteAppDataImporter;
 use App\Services\Backup\TeamSuiteBackupParser;
 use App\Services\Backup\TeamSuiteBackupRestoreService;
 use App\Support\PreferredNotifyEmail;
@@ -123,6 +125,54 @@ class TeamSuiteBackupRestoreTest extends TestCase
             ->where('legacy_id', 'a3-deleted')
             ->whereNotNull('deleted_at')
             ->count());
+    }
+
+    public function test_restore_skips_change_logs_for_missing_athletes(): void
+    {
+        $club = Club::query()->create([
+            'id' => 'club-legacy-001',
+            'name' => 'Existing',
+            'slug' => 'existing',
+            'is_active' => true,
+        ]);
+
+        $athlete = Athlete::query()->create([
+            'id' => (string) Str::uuid(),
+            'club_id' => $club->id,
+            'legacy_id' => 'a1',
+            'first_name' => 'Νίκος',
+            'last_name' => 'Δημητρίου',
+            'status' => 'active',
+        ]);
+
+        $orphanAthleteId = (string) Str::uuid();
+        $counts = app(TeamSuiteAppDataImporter::class)->import($club->id, [
+            'athleteChangeLogs' => [
+                [
+                    'id' => 'log-ok',
+                    'athleteId' => 'a1',
+                    'field' => 'status',
+                    'oldValue' => 'inactive',
+                    'newValue' => 'active',
+                ],
+                [
+                    'id' => 'log-orphan',
+                    'athleteId' => $orphanAthleteId,
+                    'field' => 'status',
+                    'oldValue' => 'active',
+                    'newValue' => 'inactive',
+                ],
+            ],
+        ], 'merge');
+
+        $this->assertSame(1, $counts['athleteChangeLogs']);
+        $this->assertSame(1, AthleteChangeLog::query()->withoutGlobalScopes()->where('club_id', $club->id)->count());
+        $this->assertTrue(
+            AthleteChangeLog::query()->withoutGlobalScopes()
+                ->where('club_id', $club->id)
+                ->where('athlete_id', $athlete->id)
+                ->exists()
+        );
     }
 
     public function test_restore_reconciles_stale_athlete_status_on_merge(): void
