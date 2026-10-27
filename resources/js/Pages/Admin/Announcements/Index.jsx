@@ -1041,6 +1041,9 @@ export default function Index({
                                                                         'admin.announcements.destroy',
                                                                         item.id,
                                                                     ),
+                                                                    {
+                                                                        preserveScroll: true,
+                                                                    },
                                                                 );
                                                             }
                                                         }}

@@ -117,6 +117,37 @@ class UpgradeModulesTest extends TestCase
             );
     }
 
+    public function test_announcement_destroy_hides_soft_deleted_from_index(): void
+    {
+        ['user' => $user, 'club' => $club] = $this->seedAdmin();
+
+        $row = Announcement::query()->withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(),
+            'club_id' => $club->id,
+            'created_by' => $user->id,
+            'title' => 'Για διαγραφή',
+            'body' => 'Θα διαγραφεί',
+            'audience' => ['roles' => ['staff']],
+            'published_at' => now(),
+            'meta' => [],
+        ]);
+
+        $this->actingAs($user)
+            ->delete(route('admin.announcements.destroy', $row->id))
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertSoftDeleted('announcements', ['id' => $row->id]);
+
+        $this->actingAs($user)
+            ->get(route('admin.announcements.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Announcements/Index')
+                ->has('items.data', 0)
+            );
+    }
+
     public function test_club_settings_sports_facilities_seasons(): void
     {
         ['user' => $user, 'club' => $club] = $this->seedAdmin();

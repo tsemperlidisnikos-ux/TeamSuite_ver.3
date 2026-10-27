@@ -7,6 +7,7 @@ use App\Models\Announcement;
 use App\Models\Athlete;
 use App\Models\AthleteTransaction;
 use App\Models\Attendance;
+use App\Models\Scopes\ClubScope;
 use App\Models\Training;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -66,7 +67,8 @@ class AthletePortalController extends Controller
         }
 
         $announcements = $clubId
-            ? Announcement::query()->withoutGlobalScopes()
+            ? Announcement::query()
+                ->withoutGlobalScope(ClubScope::class)
                 ->where('club_id', $clubId)
                 ->latest('published_at')
                 ->limit(20)

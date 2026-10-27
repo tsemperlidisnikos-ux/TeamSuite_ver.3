@@ -16,6 +16,7 @@ use App\Models\ClothingPackage;
 use App\Models\Club;
 use App\Models\ProgressReport;
 use App\Models\RegistrationApplication;
+use App\Models\Scopes\ClubScope;
 use App\Models\SizeChart;
 use App\Models\Sport;
 use App\Models\Training;
@@ -461,7 +462,8 @@ class AthleteController extends Controller
             ->limit(80)
             ->get(['id', 'field', 'old_value', 'new_value', 'created_at']);
 
-        $announcements = Announcement::query()->withoutGlobalScopes()
+        $announcements = Announcement::query()
+            ->withoutGlobalScope(ClubScope::class)
             ->where('club_id', $athlete->club_id)
             ->latest('published_at')
             ->limit(20)

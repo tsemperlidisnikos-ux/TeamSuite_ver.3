@@ -10,6 +10,7 @@ use App\Models\Attendance;
 use App\Models\ClubSetting;
 use App\Models\Facility;
 use App\Models\ParentAthleteLink;
+use App\Models\Scopes\ClubScope;
 use App\Models\SportMatch;
 use App\Models\Training;
 use App\Services\Payments\OnlineCheckoutService;
@@ -87,7 +88,8 @@ class ParentPortalController extends Controller
         $readyProviders = $this->checkouts->readyProviders($settings);
 
         $announcements = $clubId
-            ? Announcement::query()->withoutGlobalScopes()
+            ? Announcement::query()
+                ->withoutGlobalScope(ClubScope::class)
                 ->where('club_id', $clubId)
                 ->latest('published_at')
                 ->limit(20)

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin\Concerns;
 
+use App\Models\Scopes\ClubScope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -20,7 +21,7 @@ trait InteractsWithClubResource
     {
         /** @var Model $modelClass */
         return $modelClass::query()
-            ->withoutGlobalScopes()
+            ->withoutGlobalScope(ClubScope::class)
             ->where('club_id', $this->clubId($request));
     }
 }

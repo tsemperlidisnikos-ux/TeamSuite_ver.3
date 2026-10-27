@@ -9,6 +9,7 @@ use App\Models\Athlete;
 use App\Models\Attendance;
 use App\Models\Coach;
 use App\Models\Facility;
+use App\Models\Scopes\ClubScope;
 use App\Models\Training;
 use App\Support\Roles;
 use Carbon\Carbon;
@@ -61,7 +62,8 @@ class CoachPortalController extends Controller
         $trainings = $this->coachTrainings($clubId, $classIds, $myClasses, $facilityNames);
 
         $announcements = $clubId
-            ? Announcement::query()->withoutGlobalScopes()
+            ? Announcement::query()
+                ->withoutGlobalScope(ClubScope::class)
                 ->where('club_id', $clubId)
                 ->latest('published_at')
                 ->limit(20)
