@@ -628,7 +628,7 @@ export default function Index({
                                                     <span
                                                         className={
                                                             t.type === 'charge'
-                                                                ? 'text-amber-200'
+                                                                ? 'text-orange-400'
                                                                 : 'text-emerald-800'
                                                         }
                                                     >
