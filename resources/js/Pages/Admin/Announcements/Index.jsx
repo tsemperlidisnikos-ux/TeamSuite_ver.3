@@ -431,12 +431,6 @@ export default function Index({
     return (
         <AdminLayout title="Ανακοινώσεις">
             <Head title="Ανακοινώσεις" />
-            {flash?.success && (
-                <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                    {flash.success}
-                </div>
-            )}
-
             <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                 <div>
                     <h2 className="text-xl font-semibold text-ts-fg">Ανακοινώσεις</h2>

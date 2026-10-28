@@ -182,7 +182,7 @@ class AnnouncementController extends Controller
             $row->id,
         );
 
-        $queued = [];
+        $channels = [];
         if ($publish && $sendEmail && $emails !== []) {
             SendAnnouncementEmailsJob::dispatch(
                 $clubId,
@@ -192,11 +192,11 @@ class AnnouncementController extends Controller
                 $emails,
                 $meta['image_path'] ?? null,
             );
-            $queued[] = 'email '.count($emails);
+            $channels[] = 'email σε '.count($emails).' παραλήπτες';
         }
         if ($publish && $sendSms && $phones !== []) {
             SendAnnouncementSmsJob::dispatch($clubId, $row->id, $data['title'], $data['body'], $phones);
-            $queued[] = 'SMS '.count($phones);
+            $channels[] = 'SMS σε '.count($phones);
         }
         if ($publish && $sendPush && $pushUserIds !== []) {
             SendAnnouncementPushJob::dispatch(
@@ -207,13 +207,13 @@ class AnnouncementController extends Controller
                 $pushUserIds,
                 route('admin.announcements.index'),
             );
-            $queued[] = 'push '.count($pushUserIds);
+            $channels[] = 'push σε '.count($pushUserIds);
         }
 
-        if ($queued !== []) {
+        if ($channels !== []) {
             return back()->with(
                 'success',
-                'Η ανακοίνωση δημοσιεύτηκε. Ουρά: '.implode(', ', $queued).'.'
+                'Η ανακοίνωση δημοσιεύτηκε. Στάλθηκε: '.implode(', ', $channels).'.'
             );
         }
 
@@ -289,7 +289,7 @@ class AnnouncementController extends Controller
         );
 
         $clubId = $this->clubId($request);
-        $queued = [];
+        $channels = [];
         if ($publish && $sendEmail && $emails !== []) {
             SendAnnouncementEmailsJob::dispatch(
                 $clubId,
@@ -299,11 +299,11 @@ class AnnouncementController extends Controller
                 $emails,
                 $meta['image_path'] ?? null,
             );
-            $queued[] = 'email '.count($emails);
+            $channels[] = 'email σε '.count($emails).' παραλήπτες';
         }
         if ($publish && $sendSms && $phones !== []) {
             SendAnnouncementSmsJob::dispatch($clubId, $row->id, $data['title'], $data['body'], $phones);
-            $queued[] = 'SMS '.count($phones);
+            $channels[] = 'SMS σε '.count($phones);
         }
         if ($publish && $sendPush && $pushUserIds !== []) {
             SendAnnouncementPushJob::dispatch(
@@ -314,12 +314,12 @@ class AnnouncementController extends Controller
                 $pushUserIds,
                 route('admin.announcements.index'),
             );
-            $queued[] = 'push '.count($pushUserIds);
+            $channels[] = 'push σε '.count($pushUserIds);
         }
-        if ($queued !== []) {
+        if ($channels !== []) {
             return back()->with(
                 'success',
-                'Η ανακοίνωση ενημερώθηκε. Ουρά: '.implode(', ', $queued).'.'
+                'Η ανακοίνωση ενημερώθηκε. Στάλθηκε: '.implode(', ', $channels).'.'
             );
         }
 
