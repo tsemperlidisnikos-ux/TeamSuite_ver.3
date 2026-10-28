@@ -7,7 +7,6 @@ use App\Services\Mail\ClubSmtpMailer;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 
 class SendAnnouncementEmailsJob implements ShouldQueue
@@ -34,7 +33,7 @@ class SendAnnouncementEmailsJob implements ShouldQueue
         $attachmentPath = $this->resolveAttachmentPath();
 
         try {
-            $mailer->configure($this->clubId);
+            $outbound = $mailer->mailer($this->clubId);
         } catch (\Throwable $e) {
             foreach ($this->emails as $email) {
                 if (! is_string($email) || $email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -58,7 +57,7 @@ class SendAnnouncementEmailsJob implements ShouldQueue
             }
 
             try {
-                Mail::mailer('smtp')->raw($this->body, function ($message) use ($email, $attachmentPath) {
+                $outbound->raw($this->body, function ($message) use ($email, $attachmentPath) {
                     $message->to($email)->subject($this->title);
                     if ($attachmentPath !== null) {
                         $message->attach($attachmentPath);

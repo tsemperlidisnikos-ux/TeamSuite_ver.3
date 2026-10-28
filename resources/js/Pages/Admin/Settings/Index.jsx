@@ -460,6 +460,9 @@ export default function Index({
                     }}
                 >
                     <h2 className="text-base font-semibold text-ts-fg">Email / SMTP</h2>
+                    <p className="text-sm text-ts-muted">
+                        Ισχύει μόνο για αυτόν τον σύλλογο. Κάθε σύλλογος έχει δικό του SMTP.
+                    </p>
                     <label className="flex items-center gap-2 text-sm text-ts-fg-soft">
                         <input
                             type="checkbox"

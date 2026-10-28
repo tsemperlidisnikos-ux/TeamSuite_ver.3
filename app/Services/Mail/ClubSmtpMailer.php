@@ -3,17 +3,36 @@
 namespace App\Services\Mail;
 
 use App\Models\ClubSetting;
-use Illuminate\Support\Facades\Config;
+use Illuminate\Contracts\Mail\Mailer;
+use Illuminate\Support\Facades\Mail;
 use RuntimeException;
 
 class ClubSmtpMailer
 {
     /**
-     * Apply the club SMTP settings as the active Laravel mailer.
+     * Build an isolated SMTP mailer from the given club's settings only.
+     * Does not use global MAIL_* / default mailer — another club never shares this config.
      *
      * @throws RuntimeException When SMTP is disabled or incomplete.
      */
-    public function configure(string $clubId): void
+    public function mailer(string $clubId): Mailer
+    {
+        $smtp = $this->smtpForClub($clubId);
+        $config = $this->transportConfig($smtp);
+
+        $mailer = Mail::build($config);
+        $mailer->alwaysFrom(
+            $config['from']['address'],
+            $config['from']['name'],
+        );
+
+        return $mailer;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function smtpForClub(string $clubId): array
     {
         $settings = ClubSetting::query()->where('club_id', $clubId)->first();
         $smtp = is_array($settings?->smtp) ? $settings->smtp : [];
@@ -23,11 +42,9 @@ class ClubSmtpMailer
         }
 
         $host = trim((string) ($smtp['host'] ?? ''));
-        $port = (int) ($smtp['port'] ?? 587);
+        $fromEmail = trim((string) ($smtp['fromEmail'] ?? ''));
         $username = trim((string) ($smtp['username'] ?? ''));
         $password = (string) ($smtp['password'] ?? '');
-        $fromEmail = trim((string) ($smtp['fromEmail'] ?? ''));
-        $fromName = trim((string) ($smtp['fromName'] ?? ''));
         $requireAuth = filter_var($smtp['requireAuth'] ?? true, FILTER_VALIDATE_BOOLEAN);
 
         if ($host === '') {
@@ -42,24 +59,45 @@ class ClubSmtpMailer
             throw new RuntimeException('Λείπουν username/password SMTP στις Ρυθμίσεις → Email.');
         }
 
+        return $smtp;
+    }
+
+    /**
+     * @param  array<string, mixed>  $smtp
+     * @return array<string, mixed>
+     */
+    public function transportConfig(array $smtp): array
+    {
+        $port = (int) ($smtp['port'] ?? 587);
         if ($port <= 0) {
             $port = 587;
         }
 
-        Config::set('mail.default', 'smtp');
-        Config::set('mail.mailers.smtp.transport', 'smtp');
-        Config::set('mail.mailers.smtp.host', $host);
-        Config::set('mail.mailers.smtp.port', $port);
-        Config::set('mail.mailers.smtp.username', $username !== '' ? $username : null);
-        Config::set('mail.mailers.smtp.password', $password !== '' ? $password : null);
-        Config::set('mail.mailers.smtp.scheme', $this->schemeFor($smtp));
-        Config::set('mail.mailers.smtp.url', null);
-        Config::set('mail.from.address', $fromEmail);
-        Config::set('mail.from.name', $fromName !== '' ? $fromName : (string) config('app.name'));
+        $fromName = trim((string) ($smtp['fromName'] ?? ''));
+        $username = trim((string) ($smtp['username'] ?? ''));
+        $password = (string) ($smtp['password'] ?? '');
 
-        if (app()->bound('mail.manager')) {
-            app('mail.manager')->purge('smtp');
-        }
+        return [
+            'transport' => 'smtp',
+            'host' => trim((string) ($smtp['host'] ?? '')),
+            'port' => $port,
+            'username' => $username !== '' ? $username : null,
+            'password' => $password !== '' ? $password : null,
+            'scheme' => $this->schemeFor($smtp),
+            'timeout' => 30,
+            'from' => [
+                'address' => trim((string) ($smtp['fromEmail'] ?? '')),
+                'name' => $fromName !== '' ? $fromName : (string) config('app.name'),
+            ],
+        ];
+    }
+
+    /**
+     * @deprecated Use mailer() — kept for older call sites during transition.
+     */
+    public function configure(string $clubId): void
+    {
+        $this->mailer($clubId);
     }
 
     /**
@@ -72,7 +110,7 @@ class ClubSmtpMailer
         return match ($security) {
             'ssl', 'smtps', 'tls' => 'smtps',
             'none', 'off', 'plain' => null,
-            default => null, // STARTTLS on 587: Symfony negotiates upgrade without smtps scheme
+            default => null,
         };
     }
 }

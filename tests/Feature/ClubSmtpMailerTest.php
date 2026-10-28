@@ -9,7 +9,6 @@ use App\Models\ClubSetting;
 use App\Models\User;
 use App\Services\Mail\ClubSmtpMailer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
@@ -20,17 +19,40 @@ class ClubSmtpMailerTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_configure_applies_club_smtp_settings(): void
+    public function test_transport_config_is_built_from_club_smtp_only(): void
     {
         ['club' => $club] = $this->seedClubWithSmtp();
 
-        app(ClubSmtpMailer::class)->configure($club->id);
+        $smtp = app(ClubSmtpMailer::class)->smtpForClub($club->id);
+        $config = app(ClubSmtpMailer::class)->transportConfig($smtp);
 
-        $this->assertSame('smtp', Config::get('mail.default'));
-        $this->assertSame('mail.example.com', Config::get('mail.mailers.smtp.host'));
-        $this->assertSame(587, Config::get('mail.mailers.smtp.port'));
-        $this->assertSame('noreply@example.com', Config::get('mail.from.address'));
-        $this->assertSame('secret-pass', Config::get('mail.mailers.smtp.password'));
+        $this->assertSame('mail.example.com', $config['host']);
+        $this->assertSame(587, $config['port']);
+        $this->assertSame('noreply@example.com', $config['from']['address']);
+        $this->assertSame('secret-pass', $config['password']);
+    }
+
+    public function test_each_club_has_isolated_smtp_settings(): void
+    {
+        ['club' => $clubA] = $this->seedClubWithSmtp([
+            'host' => 'smtp-a.example.com',
+            'fromEmail' => 'a@example.com',
+        ]);
+        ['club' => $clubB] = $this->seedClubWithSmtp([
+            'host' => 'smtp-b.example.com',
+            'fromEmail' => 'b@example.com',
+            'password' => 'other-pass',
+        ]);
+
+        $mailer = app(ClubSmtpMailer::class);
+        $configA = $mailer->transportConfig($mailer->smtpForClub($clubA->id));
+        $configB = $mailer->transportConfig($mailer->smtpForClub($clubB->id));
+
+        $this->assertSame('smtp-a.example.com', $configA['host']);
+        $this->assertSame('a@example.com', $configA['from']['address']);
+        $this->assertSame('smtp-b.example.com', $configB['host']);
+        $this->assertSame('b@example.com', $configB['from']['address']);
+        $this->assertNotSame($configA['host'], $configB['host']);
     }
 
     public function test_configure_requires_password_when_auth_enabled(): void
@@ -40,7 +62,7 @@ class ClubSmtpMailerTest extends TestCase
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('username/password');
 
-        app(ClubSmtpMailer::class)->configure($club->id);
+        app(ClubSmtpMailer::class)->smtpForClub($club->id);
     }
 
     public function test_announcement_job_marks_failed_when_smtp_incomplete(): void

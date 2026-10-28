@@ -133,7 +133,6 @@ export default function Login({ status, canResetPassword, portalApp = null }) {
                             className="block w-full ps-9"
                             autoComplete="username"
                             isFocused
-                            placeholder="π.χ. tsemperlidis.nikos@gmail.com"
                             onChange={(e) => setData('email', e.target.value)}
                         />
                     </div>

@@ -6,7 +6,6 @@ use App\Services\Mail\ClubSmtpMailer;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 
 class SendDebtReminderEmailsJob implements ShouldQueue
 {
@@ -23,7 +22,7 @@ class SendDebtReminderEmailsJob implements ShouldQueue
     public function handle(ClubSmtpMailer $mailer): void
     {
         try {
-            $mailer->configure($this->clubId);
+            $outbound = $mailer->mailer($this->clubId);
         } catch (\Throwable $e) {
             Log::warning('Debt reminder SMTP not configured', [
                 'club_id' => $this->clubId,
@@ -49,7 +48,7 @@ class SendDebtReminderEmailsJob implements ShouldQueue
                 .'Με εκτίμηση';
 
             try {
-                Mail::mailer('smtp')->raw($body, function ($message) use ($email, $subject) {
+                $outbound->raw($body, function ($message) use ($email, $subject) {
                     $message->to($email)->subject($subject);
                 });
             } catch (\Throwable $e) {

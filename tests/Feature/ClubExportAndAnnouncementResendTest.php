@@ -235,6 +235,10 @@ class ClubExportAndAnnouncementResendTest extends TestCase
 
         Mail::fake();
 
+        $this->mock(ClubSmtpMailer::class, function ($mock) {
+            $mock->shouldReceive('mailer')->once()->andReturn(Mail::mailer());
+        });
+
         $job = new SendAnnouncementEmailsJob(
             $club->id,
             $announcement->id,

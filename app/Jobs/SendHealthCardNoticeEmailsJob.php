@@ -7,7 +7,6 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 
 class SendHealthCardNoticeEmailsJob implements ShouldQueue
 {
@@ -27,7 +26,7 @@ class SendHealthCardNoticeEmailsJob implements ShouldQueue
     public function handle(ClubSmtpMailer $mailer): void
     {
         try {
-            $mailer->configure($this->clubId);
+            $outbound = $mailer->mailer($this->clubId);
         } catch (\Throwable $e) {
             Log::warning('Health card notice SMTP not configured', [
                 'club_id' => $this->clubId,
@@ -68,7 +67,7 @@ class SendHealthCardNoticeEmailsJob implements ShouldQueue
                 ."Ανανεώστε την και ενημερώστε τον σύλλογο.\n";
 
             try {
-                Mail::mailer('smtp')->raw($body, function ($message) use ($email, $subject) {
+                $outbound->raw($body, function ($message) use ($email, $subject) {
                     $message->to($email)->subject($subject);
                 });
                 Cache::put($cacheKey, true, now()->endOfDay());
@@ -99,7 +98,7 @@ class SendHealthCardNoticeEmailsJob implements ShouldQueue
                     continue;
                 }
                 try {
-                    Mail::mailer('smtp')->raw($summary, function ($message) use ($staffEmail) {
+                    $outbound->raw($summary, function ($message) use ($staffEmail) {
                         $message->to($staffEmail)->subject('Σύνοψη λήξεων καρτών υγείας');
                     });
                     $staffSent++;
