@@ -75,7 +75,6 @@ export default function Index({
     roleOptions = [],
     audienceOptions = {},
 }) {
-    const flash = usePage().props.flash;
     const pageErrors = usePage().props.errors || {};
     const [editingId, setEditingId] = useState(null);
     const [existingImageUrl, setExistingImageUrl] = useState(null);
