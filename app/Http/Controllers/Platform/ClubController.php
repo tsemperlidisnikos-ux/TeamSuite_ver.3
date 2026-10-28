@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\Platform;
 
 use App\Http\Controllers\Controller;
-use App\Models\Athlete;
 use App\Models\Club;
 use App\Models\LicensePackage;
+use App\Models\Scopes\ClubScope;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -17,6 +17,12 @@ class ClubController extends Controller
     {
         $clubs = Club::query()
             ->with('licensePackage:id,name,athlete_cap')
+            ->withCount([
+                'athletes as athletes_count' => fn ($query) => $query->withoutGlobalScope(ClubScope::class),
+                'athletes as athletes_active_count' => fn ($query) => $query
+                    ->withoutGlobalScope(ClubScope::class)
+                    ->where('status', 'active'),
+            ])
             ->orderBy('name')
             ->get()
             ->map(fn (Club $club) => [
@@ -27,9 +33,8 @@ class ClubController extends Controller
                 'license_package_id' => $club->license_package_id,
                 'license' => $club->licensePackage?->name,
                 'athlete_cap' => $club->licensePackage?->athlete_cap,
-                'athletes_count' => Athlete::query()->withoutGlobalScopes()
-                    ->where('club_id', $club->id)
-                    ->count(),
+                'athletes_count' => (int) $club->athletes_count,
+                'athletes_active_count' => (int) $club->athletes_active_count,
             ]);
 
         return Inertia::render('Platform/Clubs', [

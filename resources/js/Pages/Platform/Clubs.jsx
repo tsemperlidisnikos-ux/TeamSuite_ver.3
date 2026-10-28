@@ -54,8 +54,18 @@ export default function Clubs({ clubs, packages = [] }) {
                                     </select>
                                 </td>
                                 <td className="px-3 py-3 text-ts-fg-soft">
-                                    {c.athletes_count}
-                                    {c.athlete_cap ? ` / ${c.athlete_cap}` : ''}
+                                    <div className="leading-snug">
+                                        <div>
+                                            <span className="font-medium text-ts-fg">
+                                                {c.athletes_active_count ?? 0}
+                                            </span>{' '}
+                                            ενεργοί
+                                        </div>
+                                        <div className="text-xs text-ts-muted">
+                                            {c.athletes_count ?? 0} εγγεγραμμένοι
+                                            {c.athlete_cap ? ` / όριο ${c.athlete_cap}` : ''}
+                                        </div>
+                                    </div>
                                 </td>
                                 <td className="px-3 py-3">
                                     {c.is_active ? 'Ενεργός' : 'Ανενεργός'}

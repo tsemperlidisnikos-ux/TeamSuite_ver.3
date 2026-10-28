@@ -55,4 +55,9 @@ class Club extends Model
     {
         return $this->hasMany(ClubBackup::class);
     }
+
+    public function athletes(): HasMany
+    {
+        return $this->hasMany(Athlete::class);
+    }
 }

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Athlete;
 use App\Models\Club;
 use App\Models\LicensePackage;
 use App\Models\PlatformSetting;
@@ -159,6 +160,57 @@ class PlatformAdminHomeTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->where('activePreview.id', $club->id)
                 ->where('activePreview.name', $club->name)
+            );
+    }
+
+    public function test_platform_clubs_list_shows_active_and_total_athletes(): void
+    {
+        $club = Club::query()->create([
+            'id' => (string) Str::uuid(),
+            'name' => 'Athletes Club',
+            'slug' => 'athletes-'.Str::random(4),
+            'is_active' => true,
+        ]);
+
+        Athlete::query()->withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(),
+            'club_id' => $club->id,
+            'first_name' => 'Ενεργός',
+            'last_name' => 'Α',
+            'status' => 'active',
+            'gdpr_consent' => 'pending',
+        ]);
+        Athlete::query()->withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(),
+            'club_id' => $club->id,
+            'first_name' => 'Ανενεργός',
+            'last_name' => 'Β',
+            'status' => 'inactive',
+            'gdpr_consent' => 'pending',
+        ]);
+        Athlete::query()->withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(),
+            'club_id' => $club->id,
+            'first_name' => 'Δοκιμή',
+            'last_name' => 'Γ',
+            'status' => 'trial',
+            'gdpr_consent' => 'pending',
+        ]);
+
+        $user = User::factory()->create([
+            'password' => Hash::make('password'),
+            'email_verified_at' => now(),
+            'is_platform_admin' => true,
+            'active_club_id' => $club->id,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('platform.clubs.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Platform/Clubs')
+                ->where('clubs.0.athletes_count', 3)
+                ->where('clubs.0.athletes_active_count', 1)
             );
     }
 
