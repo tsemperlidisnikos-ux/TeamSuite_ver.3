@@ -8,10 +8,12 @@ use App\Models\Announcement;
 use App\Models\Athlete;
 use App\Models\Club;
 use App\Models\ClubBackup;
+use App\Models\ClubSetting;
 use App\Models\User;
 use App\Services\Backup\TeamSuiteBackupParser;
 use App\Services\Backup\TeamSuiteBackupRestoreService;
 use App\Services\Backup\TeamSuiteClubExporter;
+use App\Services\Mail\ClubSmtpMailer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
@@ -197,6 +199,21 @@ class ClubExportAndAnnouncementResendTest extends TestCase
     {
         ['club' => $club] = $this->seedAdmin();
 
+        ClubSetting::query()->create([
+            'club_id' => $club->id,
+            'smtp' => [
+                'enabled' => true,
+                'host' => 'mail.example.com',
+                'port' => '587',
+                'username' => 'user',
+                'password' => 'secret',
+                'fromName' => 'Club',
+                'fromEmail' => 'noreply@example.com',
+                'security' => 'starttls',
+                'requireAuth' => true,
+            ],
+        ]);
+
         $announcement = Announcement::query()->withoutGlobalScopes()->create([
             'id' => (string) Str::uuid(),
             'club_id' => $club->id,
@@ -227,7 +244,7 @@ class ClubExportAndAnnouncementResendTest extends TestCase
             null,
             true,
         );
-        $job->handle();
+        $job->handle(app(ClubSmtpMailer::class));
 
         $stats = $announcement->fresh()->emailStats();
         $this->assertSame(2, $stats['sentCount'] ?? null);

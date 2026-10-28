@@ -281,7 +281,30 @@ class SettingsController extends Controller
         ]);
 
         $settings = $this->settingsFor($this->clubModel($request));
-        $settings->smtp = $this->mergeSecretChannel($settings->smtp ?? [], $data, ['password']);
+        $existing = is_array($settings->smtp) ? $settings->smtp : [];
+        $merged = $this->mergeSecretChannel($existing, $data, ['password']);
+
+        if (filter_var($merged['enabled'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            $errors = [];
+            if (trim((string) ($merged['host'] ?? '')) === '') {
+                $errors['host'] = 'Απαιτείται SMTP host όταν το email είναι ενεργό.';
+            }
+            if (trim((string) ($merged['fromEmail'] ?? '')) === '') {
+                $errors['fromEmail'] = 'Απαιτείται From email όταν το email είναι ενεργό.';
+            }
+            $requireAuth = filter_var($merged['requireAuth'] ?? true, FILTER_VALIDATE_BOOLEAN);
+            if ($requireAuth && trim((string) ($merged['username'] ?? '')) === '') {
+                $errors['username'] = 'Απαιτείται username SMTP.';
+            }
+            if ($requireAuth && trim((string) ($merged['password'] ?? '')) === '') {
+                $errors['password'] = 'Απαιτείται password SMTP (ξαναβάλε το αν δεν έχει αποθηκευτεί).';
+            }
+            if ($errors !== []) {
+                return back()->withErrors($errors)->withInput();
+            }
+        }
+
+        $settings->smtp = $merged;
         $settings->save();
 
         return $this->backTab('email', 'Οι ρυθμίσεις email αποθηκεύτηκαν.');

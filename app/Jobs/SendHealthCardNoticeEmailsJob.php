@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Services\Mail\ClubSmtpMailer;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
@@ -23,8 +24,19 @@ class SendHealthCardNoticeEmailsJob implements ShouldQueue
         public array $staffEmails = [],
     ) {}
 
-    public function handle(): void
+    public function handle(ClubSmtpMailer $mailer): void
     {
+        try {
+            $mailer->configure($this->clubId);
+        } catch (\Throwable $e) {
+            Log::warning('Health card notice SMTP not configured', [
+                'club_id' => $this->clubId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return;
+        }
+
         $day = now()->toDateString();
         $sent = 0;
         $skipped = 0;
@@ -56,7 +68,7 @@ class SendHealthCardNoticeEmailsJob implements ShouldQueue
                 ."Ανανεώστε την και ενημερώστε τον σύλλογο.\n";
 
             try {
-                Mail::raw($body, function ($message) use ($email, $subject) {
+                Mail::mailer('smtp')->raw($body, function ($message) use ($email, $subject) {
                     $message->to($email)->subject($subject);
                 });
                 Cache::put($cacheKey, true, now()->endOfDay());
@@ -87,7 +99,7 @@ class SendHealthCardNoticeEmailsJob implements ShouldQueue
                     continue;
                 }
                 try {
-                    Mail::raw($summary, function ($message) use ($staffEmail) {
+                    Mail::mailer('smtp')->raw($summary, function ($message) use ($staffEmail) {
                         $message->to($staffEmail)->subject('Σύνοψη λήξεων καρτών υγείας');
                     });
                     $staffSent++;

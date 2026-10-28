@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Services\Mail\ClubSmtpMailer;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -19,8 +20,19 @@ class SendDebtReminderEmailsJob implements ShouldQueue
         public array $recipients,
     ) {}
 
-    public function handle(): void
+    public function handle(ClubSmtpMailer $mailer): void
     {
+        try {
+            $mailer->configure($this->clubId);
+        } catch (\Throwable $e) {
+            Log::warning('Debt reminder SMTP not configured', [
+                'club_id' => $this->clubId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return;
+        }
+
         foreach ($this->recipients as $row) {
             $email = $row['email'] ?? null;
             if (! is_string($email) || $email === '') {
@@ -37,7 +49,7 @@ class SendDebtReminderEmailsJob implements ShouldQueue
                 .'Με εκτίμηση';
 
             try {
-                Mail::raw($body, function ($message) use ($email, $subject) {
+                Mail::mailer('smtp')->raw($body, function ($message) use ($email, $subject) {
                     $message->to($email)->subject($subject);
                 });
             } catch (\Throwable $e) {

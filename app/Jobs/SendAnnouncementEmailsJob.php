@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Announcement;
+use App\Services\Mail\ClubSmtpMailer;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -26,11 +27,30 @@ class SendAnnouncementEmailsJob implements ShouldQueue
         public bool $mergeStats = false,
     ) {}
 
-    public function handle(): void
+    public function handle(ClubSmtpMailer $mailer): void
     {
         $sent = [];
         $failed = [];
         $attachmentPath = $this->resolveAttachmentPath();
+
+        try {
+            $mailer->configure($this->clubId);
+        } catch (\Throwable $e) {
+            foreach ($this->emails as $email) {
+                if (! is_string($email) || $email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    continue;
+                }
+                $failed[] = ['email' => $email, 'status' => 'failed', 'error' => $e->getMessage()];
+            }
+            Log::warning('Announcement email SMTP not configured', [
+                'club_id' => $this->clubId,
+                'announcement_id' => $this->announcementId,
+                'error' => $e->getMessage(),
+            ]);
+            $this->persistStats($sent, $failed);
+
+            return;
+        }
 
         foreach ($this->emails as $email) {
             if (! is_string($email) || $email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -38,7 +58,7 @@ class SendAnnouncementEmailsJob implements ShouldQueue
             }
 
             try {
-                Mail::raw($this->body, function ($message) use ($email, $attachmentPath) {
+                Mail::mailer('smtp')->raw($this->body, function ($message) use ($email, $attachmentPath) {
                     $message->to($email)->subject($this->title);
                     if ($attachmentPath !== null) {
                         $message->attach($attachmentPath);
@@ -56,6 +76,15 @@ class SendAnnouncementEmailsJob implements ShouldQueue
             }
         }
 
+        $this->persistStats($sent, $failed);
+    }
+
+    /**
+     * @param  list<array{email: string, status: string}>  $sent
+     * @param  list<array{email: string, status: string, error?: string}>  $failed
+     */
+    private function persistStats(array $sent, array $failed): void
+    {
         $row = Announcement::query()->withoutGlobalScopes()->find($this->announcementId);
         if (! $row) {
             return;
