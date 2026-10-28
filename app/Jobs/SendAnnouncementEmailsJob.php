@@ -13,6 +13,13 @@ class SendAnnouncementEmailsJob implements ShouldQueue
 {
     use Queueable;
 
+    public int $tries = 3;
+
+    public int $timeout = 1700;
+
+    /** @var list<int> */
+    public array $backoff = [30, 120, 300];
+
     /**
      * @param  list<string>  $emails
      */

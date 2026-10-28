@@ -45,7 +45,8 @@ ENV NGINX_WEBROOT=/var/www/html/public \
     HEALTHCHECK_PATH=/up \
     SESSION_DRIVER=file \
     CACHE_STORE=file \
-    QUEUE_CONNECTION=sync \
+    QUEUE_CONNECTION=database \
+    DB_QUEUE_RETRY_AFTER=1800 \
     PHP_MAX_EXECUTION_TIME=1800 \
     NGINX_FASTCGI_TIMEOUT=1800s
 
@@ -55,6 +56,12 @@ COPY --from=frontend --chown=www-data:www-data /app/public/build /var/www/html/p
 
 # Startup hooks (migrations / caches) — do NOT replace image ENTRYPOINT
 COPY --chmod=755 docker/entrypoint.d/99-teamsuite.sh /etc/entrypoint.d/99-teamsuite.sh
+
+# Background queue worker (bulk SMTP / announcements must not run inside HTTP)
+COPY --chmod=755 docker/s6/laravel-queue/run /etc/s6-overlay/s6-rc.d/laravel-queue/run
+COPY docker/s6/laravel-queue/type /etc/s6-overlay/s6-rc.d/laravel-queue/type
+COPY docker/s6/laravel-queue/dependencies.d /etc/s6-overlay/s6-rc.d/laravel-queue/dependencies.d
+RUN touch /etc/s6-overlay/user-bundles.d/user/contents.d/laravel-queue
 
 RUN mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache \

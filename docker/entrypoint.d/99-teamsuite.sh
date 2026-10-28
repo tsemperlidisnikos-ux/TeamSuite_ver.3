@@ -53,7 +53,8 @@ fi
 # Prefer file drivers until DB is proven reachable (avoids 500 on /login).
 export SESSION_DRIVER="${SESSION_DRIVER:-file}"
 export CACHE_STORE="${CACHE_STORE:-file}"
-export QUEUE_CONNECTION="${QUEUE_CONNECTION:-sync}"
+export QUEUE_CONNECTION="${QUEUE_CONNECTION:-database}"
+export DB_QUEUE_RETRY_AFTER="${DB_QUEUE_RETRY_AFTER:-1800}"
 
 echo "[teamsuite] DB_CONNECTION=${DB_CONNECTION:-} DB_HOST=${DB_HOST:-} DB_PORT=${DB_PORT:-} DB_DATABASE=${DB_DATABASE:-}"
 
