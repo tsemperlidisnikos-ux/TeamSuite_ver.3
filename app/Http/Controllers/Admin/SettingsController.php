@@ -305,6 +305,7 @@ class SettingsController extends Controller
             }
         }
 
+        unset($merged['passwordSet']);
         $settings->smtp = $merged;
         $settings->save();
 
@@ -315,19 +316,49 @@ class SettingsController extends Controller
     {
         $data = $request->validate([
             'to' => ['required', 'email', 'max:160'],
+            'enabled' => 'boolean',
+            'provider' => 'nullable|string|max:40',
+            'host' => 'nullable|string|max:160',
+            'port' => 'nullable|string|max:10',
+            'username' => 'nullable|string|max:160',
+            'password' => 'nullable|string|max:255',
+            'fromName' => 'nullable|string|max:160',
+            'fromEmail' => 'nullable|email|max:160',
+            'security' => 'nullable|string|max:40',
+            'requireAuth' => 'boolean',
         ]);
 
+        $to = $data['to'];
+        unset($data['to']);
+
         $club = $this->clubModel($request);
+        $settings = $this->settingsFor($club);
+        $existing = is_array($settings->smtp) ? $settings->smtp : [];
+        $merged = $this->mergeSecretChannel($existing, $data, ['password']);
+        unset($merged['passwordSet']);
+        $merged['enabled'] = filter_var($merged['enabled'] ?? true, FILTER_VALIDATE_BOOLEAN);
 
         try {
-            $outbound = $mailer->mailer($club->id);
+            $outbound = $mailer->mailerFromSmtp($merged);
+        } catch (\Throwable $e) {
+            return $this->backTab(
+                'email',
+                null,
+                'Αποτυχία δοκιμαστικού email: '.$e->getMessage()
+            );
+        }
+
+        $settings->smtp = $merged;
+        $settings->save();
+
+        try {
             $outbound->raw(
                 "Δοκιμαστικό μήνυμα από το TeamSuite.\n\n"
                 ."Σύλλογος: {$club->name}\n"
                 ."Αν λάβατε αυτό το email, οι ρυθμίσεις SMTP λειτουργούν.\n",
-                function ($message) use ($data, $club) {
+                function ($message) use ($to, $club) {
                     $message
-                        ->to($data['to'])
+                        ->to($to)
                         ->subject('Δοκιμαστικό email — '.$club->name);
                 }
             );
@@ -341,7 +372,7 @@ class SettingsController extends Controller
 
         return $this->backTab(
             'email',
-            'Στάλθηκε δοκιμαστικό email στο '.$data['to'].'.'
+            'Στάλθηκε δοκιμαστικό email στο '.$to.'. Οι ρυθμίσεις αποθηκεύτηκαν.'
         );
     }
 

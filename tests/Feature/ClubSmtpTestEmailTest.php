@@ -6,6 +6,7 @@ use App\Models\Club;
 use App\Models\ClubSetting;
 use App\Models\User;
 use App\Services\Mail\ClubSmtpMailer;
+use Illuminate\Contracts\Mail\Mailer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -15,24 +16,40 @@ class ClubSmtpTestEmailTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_admin_can_send_test_email_with_saved_smtp(): void
+    public function test_admin_can_send_test_email_with_form_smtp_and_persists(): void
     {
-        ['club' => $club, 'user' => $user] = $this->seedClubWithSmtp();
+        ['club' => $club, 'user' => $user] = $this->seedClubWithSmtp([
+            'fromEmail' => '',
+            'password' => '',
+        ]);
 
-        $outbound = \Mockery::mock(\Illuminate\Contracts\Mail\Mailer::class);
+        $outbound = \Mockery::mock(Mailer::class);
         $outbound->shouldReceive('raw')->once()->andReturnNull();
 
         $this->mock(ClubSmtpMailer::class, function ($mock) use ($outbound) {
-            $mock->shouldReceive('mailer')->once()->andReturn($outbound);
+            $mock->shouldReceive('mailerFromSmtp')->once()->andReturn($outbound);
         });
 
         $this->actingAs($user)
             ->from(route('admin.settings.index', ['tab' => 'email']))
             ->post(route('admin.settings.email.test'), [
                 'to' => 'check@example.com',
+                'enabled' => true,
+                'host' => 'mail.example.com',
+                'port' => '587',
+                'username' => 'smtp-user',
+                'password' => 'secret-pass',
+                'fromName' => 'SMTP Club',
+                'fromEmail' => 'noreply@example.com',
+                'security' => 'starttls',
+                'requireAuth' => true,
             ])
             ->assertRedirect(route('admin.settings.index', ['tab' => 'email']))
             ->assertSessionHas('success');
+
+        $smtp = ClubSetting::query()->where('club_id', $club->id)->first()?->smtp;
+        $this->assertSame('noreply@example.com', $smtp['fromEmail'] ?? null);
+        $this->assertSame('secret-pass', $smtp['password'] ?? null);
     }
 
     public function test_test_email_fails_when_smtp_incomplete(): void
@@ -46,6 +63,12 @@ class ClubSmtpTestEmailTest extends TestCase
             ->from(route('admin.settings.index', ['tab' => 'email']))
             ->post(route('admin.settings.email.test'), [
                 'to' => 'check@example.com',
+                'enabled' => true,
+                'host' => 'mail.example.com',
+                'fromEmail' => '',
+                'username' => 'user',
+                'password' => '',
+                'requireAuth' => true,
             ])
             ->assertRedirect(route('admin.settings.index', ['tab' => 'email']))
             ->assertSessionHas('error');

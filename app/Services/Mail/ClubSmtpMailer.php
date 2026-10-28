@@ -10,14 +10,23 @@ use RuntimeException;
 class ClubSmtpMailer
 {
     /**
-     * Build an isolated SMTP mailer from the given club's settings only.
-     * Does not use global MAIL_* / default mailer — another club never shares this config.
+     * Build an isolated SMTP mailer from the given club's saved settings only.
      *
      * @throws RuntimeException When SMTP is disabled or incomplete.
      */
     public function mailer(string $clubId): Mailer
     {
-        $smtp = $this->smtpForClub($clubId);
+        return $this->mailerFromSmtp($this->smtpForClub($clubId));
+    }
+
+    /**
+     * Build a mailer from an SMTP settings array (e.g. just-saved form values).
+     *
+     * @param  array<string, mixed>  $smtp
+     */
+    public function mailerFromSmtp(array $smtp): Mailer
+    {
+        $smtp = $this->validatedSmtp($smtp);
         $config = $this->transportConfig($smtp);
 
         $mailer = Mail::build($config);
@@ -37,6 +46,17 @@ class ClubSmtpMailer
         $settings = ClubSetting::query()->where('club_id', $clubId)->first();
         $smtp = is_array($settings?->smtp) ? $settings->smtp : [];
 
+        return $this->validatedSmtp($smtp);
+    }
+
+    /**
+     * @param  array<string, mixed>  $smtp
+     * @return array<string, mixed>
+     *
+     * @throws RuntimeException
+     */
+    public function validatedSmtp(array $smtp): array
+    {
         if (! filter_var($smtp['enabled'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
             throw new RuntimeException('Το SMTP του συλλόγου δεν είναι ενεργό στις Ρυθμίσεις → Email.');
         }
@@ -93,7 +113,7 @@ class ClubSmtpMailer
     }
 
     /**
-     * @deprecated Use mailer() — kept for older call sites during transition.
+     * @deprecated Use mailer()
      */
     public function configure(string $clubId): void
     {

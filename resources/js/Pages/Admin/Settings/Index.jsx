@@ -136,9 +136,9 @@ export default function Index({
         requireAuth: settings?.smtp?.requireAuth ?? true,
     });
 
-    const testEmailForm = useForm({
-        to: '',
-    });
+    const [testEmailTo, setTestEmailTo] = useState('');
+    const [testEmailProcessing, setTestEmailProcessing] = useState(false);
+    const [testEmailError, setTestEmailError] = useState('');
 
     const smsForm = useForm({
         enabled: Boolean(settings?.sms?.enabled),
@@ -492,13 +492,14 @@ export default function Index({
                                     {settings?.smtp?.[`${key}Set`] && key === 'password' ? (
                                         <span className="ms-1 text-emerald-500">(αποθηκευμένο)</span>
                                     ) : null}
-                                    <input
-                                        type={type || 'text'}
-                                        className={`mt-1 ${field}`}
-                                        value={emailForm.data[key]}
-                                        onChange={(e) => emailForm.setData(key, e.target.value)}
-                                        placeholder={key === 'password' ? '••••••••' : ''}
-                                    />
+                                <input
+                                    type={type || 'text'}
+                                    className={`mt-1 ${field}`}
+                                    value={emailForm.data[key]}
+                                    onChange={(e) => emailForm.setData(key, e.target.value)}
+                                    placeholder={key === 'password' ? 'Ξαναβάλε το password' : ''}
+                                    autoComplete={key === 'password' ? 'new-password' : 'off'}
+                                />
                                 </label>
                             ))}
                         </div>
@@ -511,34 +512,64 @@ export default function Index({
                         className={card}
                         onSubmit={(e) => {
                             e.preventDefault();
-                            testEmailForm.post(route('admin.settings.email.test'), {
-                                preserveScroll: true,
-                            });
+                            setTestEmailError('');
+                            setTestEmailProcessing(true);
+                            router.post(
+                                route('admin.settings.email.test'),
+                                {
+                                    to: testEmailTo,
+                                    enabled: emailForm.data.enabled,
+                                    provider: emailForm.data.provider,
+                                    host: emailForm.data.host,
+                                    port: emailForm.data.port,
+                                    username: emailForm.data.username,
+                                    password: emailForm.data.password,
+                                    fromName: emailForm.data.fromName,
+                                    fromEmail: emailForm.data.fromEmail,
+                                    security: emailForm.data.security,
+                                    requireAuth: emailForm.data.requireAuth,
+                                },
+                                {
+                                    preserveScroll: true,
+                                    onFinish: () => setTestEmailProcessing(false),
+                                    onError: (errors) => {
+                                        setTestEmailError(
+                                            errors.to ||
+                                                errors.fromEmail ||
+                                                errors.password ||
+                                                errors.host ||
+                                                'Έλεγχος στοιχείων SMTP.',
+                                        );
+                                    },
+                                },
+                            );
                         }}
                     >
                         <h3 className="text-sm font-semibold text-ts-fg">Δοκιμαστικό email</h3>
                         <p className="text-sm text-ts-muted">
-                            Χρησιμοποιεί τις αποθηκευμένες ρυθμίσεις SMTP. Αποθήκευσε πρώτα τις αλλαγές.
+                            Στέλνει με τις τιμές της φόρμας πάνω και τις αποθηκεύει αν είναι έγκυρες.
+                            Αν το Password δείχνει τελείες από τον browser, ξαναγράψ’ το χειροκίνητα.
                         </p>
                         <label className="block text-xs text-ts-muted">
                             Διεύθυνση παραλήπτη
                             <input
                                 type="email"
                                 className={`mt-1 ${field}`}
-                                value={testEmailForm.data.to}
-                                onChange={(e) => testEmailForm.setData('to', e.target.value)}
+                                value={testEmailTo}
+                                onChange={(e) => setTestEmailTo(e.target.value)}
+                                autoComplete="off"
                                 required
                             />
                         </label>
-                        {testEmailForm.errors.to && (
-                            <p className="text-sm text-rose-500">{testEmailForm.errors.to}</p>
+                        {testEmailError && (
+                            <p className="text-sm text-rose-500">{testEmailError}</p>
                         )}
                         <button
                             type="submit"
                             className={btnPrimary}
-                            disabled={testEmailForm.processing || !testEmailForm.data.to}
+                            disabled={testEmailProcessing || !testEmailTo}
                         >
-                            {testEmailForm.processing
+                            {testEmailProcessing
                                 ? 'Αποστολή…'
                                 : 'Αποστολή δοκιμαστικού'}
                         </button>
