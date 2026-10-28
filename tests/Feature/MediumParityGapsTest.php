@@ -155,7 +155,7 @@ class MediumParityGapsTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Admin/Transactions/Index')
                 ->has('athletes', 1)
-                ->where('athletes.0.amka', '********')
+                ->where('athletes.0.amka', 'encrypted-amka')
                 ->where('athletes.0.registration_number', 'A-100')
                 ->where('athletes.0.father_name', 'Κώστας')
                 ->where('athletes.0.birth_date', '2012-05-10')

@@ -384,6 +384,19 @@ export default function Show({
                 </div>
             )}
 
+            {Object.keys(form.errors || {}).length > 0 && (
+                <div className="mb-3 shrink-0 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                    <p className="font-medium">Η αποθήκευση απέτυχε. Ελέγξτε τα παρακάτω:</p>
+                    <ul className="mt-1 list-disc pl-5">
+                        {Object.entries(form.errors).map(([field, message]) => (
+                            <li key={field}>
+                                {typeof message === 'string' ? message : String(message)}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
             <div className="mb-2 shrink-0 text-sm text-ts-muted">
                 <Link href={route('admin.athletes.index')} className="text-ts-accent hover:underline">
                     Αθλητές

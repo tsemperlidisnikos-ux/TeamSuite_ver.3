@@ -23,6 +23,7 @@ use App\Models\Training;
 use App\Services\Athletes\AthleteCsvService;
 use App\Services\Audit\ClubActivityLogger;
 use App\Services\Gdpr\AmkaService;
+use App\Support\ClothingPackageIds;
 use App\Support\GreekGivenName;
 use App\Support\PreferredNotifyEmail;
 use Illuminate\Http\RedirectResponse;
@@ -505,8 +506,14 @@ class AthleteController extends Controller
         $prevId = $idx !== false && $idx > 0 ? $neighbors[$idx - 1] : null;
         $nextId = $idx !== false && $idx < $neighbors->count() - 1 ? $neighbors[$idx + 1] : null;
 
+        $profile = $athlete->toProfileArray($canAmka);
+        $profile['clothing_package_ids'] = ClothingPackageIds::resolve(
+            (array) ($profile['clothing_package_ids'] ?? []),
+            $athlete->club_id,
+        );
+
         return Inertia::render('Admin/Athletes/Show', [
-            'athlete' => $athlete->toProfileArray($canAmka),
+            'athlete' => $profile,
             'canAmka' => $canAmka,
             'classes' => $classes,
             'sportOptions' => $sports,
@@ -563,6 +570,15 @@ class AthleteController extends Controller
     public function update(Request $request, string $id, AmkaService $amka): RedirectResponse
     {
         $athlete = $this->clubQuery(Athlete::class, $request)->findOrFail($id);
+
+        if ($request->exists('clothing_package_ids')) {
+            $request->merge([
+                'clothing_package_ids' => ClothingPackageIds::resolve(
+                    (array) $request->input('clothing_package_ids', []),
+                    $athlete->club_id,
+                ),
+            ]);
+        }
 
         $data = $request->validate([
             'first_name' => 'required|string|max:120',

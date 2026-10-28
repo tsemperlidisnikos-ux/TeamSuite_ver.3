@@ -147,7 +147,7 @@ class TransactionController extends Controller
                     'last_name' => $athlete->last_name,
                     'birth_date' => optional($athlete->birth_date)?->toDateString(),
                     'sport' => $athlete->sport,
-                    'amka' => filled($athlete->amka_encrypted) ? '********' : '',
+                    'amka' => $athlete->amka_encrypted ?: '',
                     // Αρ. Δελτίου: federation registration; fall back to empty dash on UI
                     'registration_number' => $registration,
                     'father_first_name' => $fatherName,
@@ -212,7 +212,7 @@ class TransactionController extends Controller
                     'phone' => $athlete->phone,
                     'sport' => $athlete->sport,
                     'city' => $athlete->meta['city'] ?? '',
-                    'amka' => filled($athlete->amka_encrypted) ? '********' : '',
+                    'amka' => $athlete->amka_encrypted ?: '',
                     'registration_number' => $athlete->meta['registration_number'] ?? '',
                     'father_first_name' => $fatherName,
                     'father_name' => $fatherName,
