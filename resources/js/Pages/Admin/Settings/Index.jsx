@@ -136,6 +136,10 @@ export default function Index({
         requireAuth: settings?.smtp?.requireAuth ?? true,
     });
 
+    const testEmailForm = useForm({
+        to: '',
+    });
+
     const smsForm = useForm({
         enabled: Boolean(settings?.sms?.enabled),
         provider: settings?.sms?.provider || 'sms.to',
@@ -452,55 +456,94 @@ export default function Index({
             )}
 
             {tab === 'email' && (
-                <form
-                    className={`max-w-xl ${card}`}
-                    onSubmit={(e) => {
-                        e.preventDefault();
-                        emailForm.post(route('admin.settings.email.update'));
-                    }}
-                >
-                    <h2 className="text-base font-semibold text-ts-fg">Email / SMTP</h2>
-                    <p className="text-sm text-ts-muted">
-                        Ισχύει μόνο για αυτόν τον σύλλογο. Κάθε σύλλογος έχει δικό του SMTP.
-                    </p>
-                    <label className="flex items-center gap-2 text-sm text-ts-fg-soft">
-                        <input
-                            type="checkbox"
-                            checked={emailForm.data.enabled}
-                            onChange={(e) => emailForm.setData('enabled', e.target.checked)}
-                        />
-                        Ενεργό
-                    </label>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                        {[
-                            ['provider', 'Πάροχος'],
-                            ['host', 'Host'],
-                            ['port', 'Port'],
-                            ['username', 'Username'],
-                            ['password', 'Password', 'password'],
-                            ['fromName', 'From name'],
-                            ['fromEmail', 'From email'],
-                            ['security', 'Security'],
-                        ].map(([key, label, type]) => (
-                            <label key={key} className="block text-xs text-ts-muted">
-                                {label}
-                                {settings?.smtp?.[`${key}Set`] && key === 'password' ? (
-                                    <span className="ms-1 text-emerald-500">(αποθηκευμένο)</span>
-                                ) : null}
-                                <input
-                                    type={type || 'text'}
-                                    className={`mt-1 ${field}`}
-                                    value={emailForm.data[key]}
-                                    onChange={(e) => emailForm.setData(key, e.target.value)}
-                                    placeholder={key === 'password' ? '••••••••' : ''}
-                                />
-                            </label>
-                        ))}
-                    </div>
-                    <button type="submit" className={btnPrimary}>
-                        Αποθήκευση
-                    </button>
-                </form>
+                <div className="max-w-xl space-y-4">
+                    <form
+                        className={card}
+                        onSubmit={(e) => {
+                            e.preventDefault();
+                            emailForm.post(route('admin.settings.email.update'));
+                        }}
+                    >
+                        <h2 className="text-base font-semibold text-ts-fg">Email / SMTP</h2>
+                        <p className="text-sm text-ts-muted">
+                            Ισχύει μόνο για αυτόν τον σύλλογο. Κάθε σύλλογος έχει δικό του SMTP.
+                        </p>
+                        <label className="flex items-center gap-2 text-sm text-ts-fg-soft">
+                            <input
+                                type="checkbox"
+                                checked={emailForm.data.enabled}
+                                onChange={(e) => emailForm.setData('enabled', e.target.checked)}
+                            />
+                            Ενεργό
+                        </label>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                            {[
+                                ['provider', 'Πάροχος'],
+                                ['host', 'Host'],
+                                ['port', 'Port'],
+                                ['username', 'Username'],
+                                ['password', 'Password', 'password'],
+                                ['fromName', 'From name'],
+                                ['fromEmail', 'From email'],
+                                ['security', 'Security'],
+                            ].map(([key, label, type]) => (
+                                <label key={key} className="block text-xs text-ts-muted">
+                                    {label}
+                                    {settings?.smtp?.[`${key}Set`] && key === 'password' ? (
+                                        <span className="ms-1 text-emerald-500">(αποθηκευμένο)</span>
+                                    ) : null}
+                                    <input
+                                        type={type || 'text'}
+                                        className={`mt-1 ${field}`}
+                                        value={emailForm.data[key]}
+                                        onChange={(e) => emailForm.setData(key, e.target.value)}
+                                        placeholder={key === 'password' ? '••••••••' : ''}
+                                    />
+                                </label>
+                            ))}
+                        </div>
+                        <button type="submit" className={btnPrimary} disabled={emailForm.processing}>
+                            Αποθήκευση
+                        </button>
+                    </form>
+
+                    <form
+                        className={card}
+                        onSubmit={(e) => {
+                            e.preventDefault();
+                            testEmailForm.post(route('admin.settings.email.test'), {
+                                preserveScroll: true,
+                            });
+                        }}
+                    >
+                        <h3 className="text-sm font-semibold text-ts-fg">Δοκιμαστικό email</h3>
+                        <p className="text-sm text-ts-muted">
+                            Χρησιμοποιεί τις αποθηκευμένες ρυθμίσεις SMTP. Αποθήκευσε πρώτα τις αλλαγές.
+                        </p>
+                        <label className="block text-xs text-ts-muted">
+                            Διεύθυνση παραλήπτη
+                            <input
+                                type="email"
+                                className={`mt-1 ${field}`}
+                                value={testEmailForm.data.to}
+                                onChange={(e) => testEmailForm.setData('to', e.target.value)}
+                                required
+                            />
+                        </label>
+                        {testEmailForm.errors.to && (
+                            <p className="text-sm text-rose-500">{testEmailForm.errors.to}</p>
+                        )}
+                        <button
+                            type="submit"
+                            className={btnPrimary}
+                            disabled={testEmailForm.processing || !testEmailForm.data.to}
+                        >
+                            {testEmailForm.processing
+                                ? 'Αποστολή…'
+                                : 'Αποστολή δοκιμαστικού'}
+                        </button>
+                    </form>
+                </div>
             )}
 
             {tab === 'sms' && (

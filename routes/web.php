@@ -186,6 +186,7 @@ Route::middleware(['auth', 'verified', 'club'])->group(function () {
     Route::get('/admin/settings', [SettingsController::class, 'index'])->name('admin.settings.index');
     Route::post('/admin/settings/club', [SettingsController::class, 'updateClub'])->name('admin.settings.club.update');
     Route::post('/admin/settings/email', [SettingsController::class, 'updateEmail'])->name('admin.settings.email.update');
+    Route::post('/admin/settings/email/test', [SettingsController::class, 'testEmail'])->name('admin.settings.email.test');
     Route::post('/admin/settings/sms', [SettingsController::class, 'updateSms'])->name('admin.settings.sms.update');
     Route::post('/admin/settings/payments', [SettingsController::class, 'updatePayments'])->name('admin.settings.payments.update');
     Route::post('/admin/settings/public-registration', [SettingsController::class, 'updatePublicRegistration'])->name('admin.settings.public.update');

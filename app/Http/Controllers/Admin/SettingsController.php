@@ -17,6 +17,7 @@ use App\Models\ReceiptSeries;
 use App\Models\SizeChart;
 use App\Models\Sport;
 use App\Models\User;
+use App\Services\Mail\ClubSmtpMailer;
 use App\Services\Platform\PlatformConfigService;
 use App\Support\Navigation;
 use App\Support\Roles;
@@ -308,6 +309,40 @@ class SettingsController extends Controller
         $settings->save();
 
         return $this->backTab('email', 'Οι ρυθμίσεις email αποθηκεύτηκαν.');
+    }
+
+    public function testEmail(Request $request, ClubSmtpMailer $mailer): RedirectResponse
+    {
+        $data = $request->validate([
+            'to' => ['required', 'email', 'max:160'],
+        ]);
+
+        $club = $this->clubModel($request);
+
+        try {
+            $outbound = $mailer->mailer($club->id);
+            $outbound->raw(
+                "Δοκιμαστικό μήνυμα από το TeamSuite.\n\n"
+                ."Σύλλογος: {$club->name}\n"
+                ."Αν λάβατε αυτό το email, οι ρυθμίσεις SMTP λειτουργούν.\n",
+                function ($message) use ($data, $club) {
+                    $message
+                        ->to($data['to'])
+                        ->subject('Δοκιμαστικό email — '.$club->name);
+                }
+            );
+        } catch (\Throwable $e) {
+            return $this->backTab(
+                'email',
+                null,
+                'Αποτυχία δοκιμαστικού email: '.$e->getMessage()
+            );
+        }
+
+        return $this->backTab(
+            'email',
+            'Στάλθηκε δοκιμαστικό email στο '.$data['to'].'.'
+        );
     }
 
     public function updateSms(Request $request): RedirectResponse
