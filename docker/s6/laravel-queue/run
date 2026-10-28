@@ -1,6 +1,7 @@
 #!/command/with-contenv sh
 cd /var/www/html || exit 1
-exec s6-setuidgid www-data php /var/www/html/artisan queue:work \
+# Container USER is already www-data; do not call s6-setuidgid (EPERM).
+exec php /var/www/html/artisan queue:work \
   --sleep=1 \
   --tries=3 \
   --timeout=1700 \
