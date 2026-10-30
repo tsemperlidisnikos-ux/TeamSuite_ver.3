@@ -1,6 +1,6 @@
 import AdminLayout from '@/Layouts/AdminLayout';
 import { formatCurrency } from '@/lib/portalFormat';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
 
 const PRINT_TYPES = [
@@ -499,24 +499,24 @@ export default function Index({
                                         <tr key={a.id} className="border-t border-ts-border">
                                             <td className="py-1.5 pe-3">{index + 1}</td>
                                             <td className="py-1.5 pe-3">
-                                                <Link
+                                                <a
                                                     href={route('admin.athletes.show', a.id)}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     className="font-medium text-ts-accent hover:underline"
                                                 >
                                                     {a.last_name}
-                                                </Link>
+                                                </a>
                                             </td>
                                             <td className="py-1.5 pe-3">
-                                                <Link
+                                                <a
                                                     href={route('admin.athletes.show', a.id)}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     className="font-medium text-ts-accent hover:underline"
                                                 >
                                                     {a.first_name}
-                                                </Link>
+                                                </a>
                                             </td>
                                             {selected === 'month-subscription' ? (
                                                 <>
