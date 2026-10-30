@@ -1,6 +1,6 @@
 import AdminLayout from '@/Layouts/AdminLayout';
 import { formatCurrency } from '@/lib/portalFormat';
-import { Head, router } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
 
 const PRINT_TYPES = [
@@ -66,6 +66,11 @@ function matchTri(value, flag) {
     return true;
 }
 
+function readQuery(url) {
+    const raw = url.includes('?') ? url.split('?')[1] : '';
+    return new URLSearchParams(raw);
+}
+
 export default function Index({
     athletes = [],
     classes = [],
@@ -73,23 +78,38 @@ export default function Index({
     filters = {},
     yearOptions = [],
 }) {
-    const [selected, setSelected] = useState('athletes-registry');
-    const [q, setQ] = useState('');
-    const [sport, setSport] = useState('');
-    const [teamId, setTeamId] = useState('');
-    const [gender, setGender] = useState('');
-    const [active, setActive] = useState('yes');
-    const [monthlyCharge, setMonthlyCharge] = useState('');
+    const page = usePage();
+    const query = useMemo(() => readQuery(page.url), [page.url]);
+    const isResultsView = query.get('view') === 'results';
+
+    const [selected, setSelected] = useState(
+        () => query.get('type') || 'athletes-registry',
+    );
+    const [q, setQ] = useState(() => query.get('q') || '');
+    const [sport, setSport] = useState(() => query.get('sport') || '');
+    const [teamId, setTeamId] = useState(() => query.get('team_id') || '');
+    const [gender, setGender] = useState(() => query.get('gender') || '');
+    const [active, setActive] = useState(() => query.get('active') || 'yes');
+    const [monthlyCharge, setMonthlyCharge] = useState(
+        () => query.get('monthly_charge') || '',
+    );
     const [registrationFee, setRegistrationFee] = useState('');
     const [seasonTicket, setSeasonTicket] = useState('');
     const [customCharge, setCustomCharge] = useState('');
     const [hasBalance, setHasBalance] = useState('yes');
-    const [month, setMonth] = useState(filters.month || new Date().getMonth() + 1);
-    const [year, setYear] = useState(filters.year || new Date().getFullYear());
-    const [payStatus, setPayStatus] = useState('');
-    const [showResults, setShowResults] = useState(false);
+    const [month, setMonth] = useState(
+        () => Number(query.get('month') || filters.month || new Date().getMonth() + 1),
+    );
+    const [year, setYear] = useState(
+        () => Number(query.get('year') || filters.year || new Date().getFullYear()),
+    );
+    const [payStatus, setPayStatus] = useState(() => query.get('pay_status') || '');
+    const [showResults, setShowResults] = useState(
+        () => isResultsView && query.get('type') !== 'month-subscription',
+    );
 
     const current = PRINT_TYPES.find((t) => t.id === selected) || PRINT_TYPES[0];
+    const opensResultsInNewWindow = selected === 'month-subscription';
 
     const sportOptions = useMemo(() => {
         if (sports?.length) return sports;
@@ -217,7 +237,186 @@ export default function Index({
         URL.revokeObjectURL(url);
     };
 
+    const openMonthSubscriptionResults = () => {
+        const params = new URLSearchParams({
+            type: 'month-subscription',
+            view: 'results',
+            month: String(month),
+            year: String(year),
+            q,
+            sport,
+            team_id: teamId,
+            gender,
+            active,
+            monthly_charge: monthlyCharge,
+            pay_status: payStatus,
+        });
+        window.open(
+            `${route('admin.prints.index')}?${params.toString()}`,
+            '_blank',
+            'noopener,noreferrer',
+        );
+    };
+
+    const runSearch = () => {
+        if (opensResultsInNewWindow) {
+            openMonthSubscriptionResults();
+            return;
+        }
+        setShowResults(true);
+    };
+
+    const showInlineResults =
+        !opensResultsInNewWindow &&
+        (showResults ||
+            selected === 'athletes-registry' ||
+            selected === 'medical-data' ||
+            selected === 'debtors');
+
     const inputCls = 'w-full rounded-md border border-ts-border bg-ts-bg px-2 py-1.5 text-sm';
+
+    const resultsTable = (
+        <div className="overflow-x-auto">
+            {selected === 'month-subscription' && monthSummary ? (
+                <p className="mb-3 text-sm text-ts-muted">{monthSummary}</p>
+            ) : null}
+            <table className="min-w-full text-sm print:text-black">
+                <thead>
+                    <tr className="text-left text-xs uppercase text-ts-muted">
+                        <th className="py-1 pe-3">#</th>
+                        <th className="py-1 pe-3">Επώνυμο</th>
+                        <th className="py-1 pe-3">Όνομα</th>
+                        {selected === 'month-subscription' ? (
+                            <>
+                                <th className="py-1 pe-3">Τμήμα</th>
+                                <th className="py-1 pe-3">Κατάσταση</th>
+                                <th className="py-1 pe-3">Χρέωση</th>
+                                <th className="py-1 pe-3">Πληρωμή</th>
+                                <th className="py-1 pe-3">Υπόλοιπο μήνα</th>
+                                <th className="py-1">Τηλ. γονέα</th>
+                            </>
+                        ) : (
+                            <>
+                                <th className="py-1 pe-3">Άθλημα</th>
+                                <th className="py-1">Τμήμα</th>
+                            </>
+                        )}
+                    </tr>
+                </thead>
+                <tbody>
+                    {filtered.map((a, index) => (
+                        <tr key={a.id} className="border-t border-ts-border">
+                            <td className="py-1.5 pe-3">{index + 1}</td>
+                            <td className="py-1.5 pe-3">
+                                <a
+                                    href={route('admin.athletes.show', a.id)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="font-medium text-ts-accent hover:underline"
+                                >
+                                    {a.last_name}
+                                </a>
+                            </td>
+                            <td className="py-1.5 pe-3">
+                                <a
+                                    href={route('admin.athletes.show', a.id)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="font-medium text-ts-accent hover:underline"
+                                >
+                                    {a.first_name}
+                                </a>
+                            </td>
+                            {selected === 'month-subscription' ? (
+                                <>
+                                    <td className="py-1.5 pe-3">{a.class_names || '—'}</td>
+                                    <td className="py-1.5 pe-3">{a.month_pay_status_label}</td>
+                                    <td className="py-1.5 pe-3">
+                                        {formatCurrency(a.month_charged || 0)}
+                                    </td>
+                                    <td className="py-1.5 pe-3">
+                                        {formatCurrency(a.month_paid || 0)}
+                                    </td>
+                                    <td className="py-1.5 pe-3">
+                                        {formatCurrency(a.month_remaining || 0)}
+                                    </td>
+                                    <td className="py-1.5">
+                                        {a.guardian_phone || a.phone || ''}
+                                    </td>
+                                </>
+                            ) : (
+                                <>
+                                    <td className="py-1.5 pe-3">{a.sport || '—'}</td>
+                                    <td className="py-1.5">{a.class_names || '—'}</td>
+                                </>
+                            )}
+                        </tr>
+                    ))}
+                    {!filtered.length && (
+                        <tr>
+                            <td colSpan={9} className="py-8 text-center text-ts-muted">
+                                Δεν βρέθηκαν εγγραφές με αυτά τα φίλτρα.
+                            </td>
+                        </tr>
+                    )}
+                </tbody>
+                {selected === 'month-subscription' && filtered.length > 0 && monthTotals && (
+                    <tfoot>
+                        <tr className="border-t-2 border-ts-border bg-ts-surface-2/60 font-semibold text-ts-fg">
+                            <td className="py-2 pe-3" colSpan={5}>
+                                Σύνολα ({filtered.length})
+                            </td>
+                            <td className="py-2 pe-3">
+                                {formatCurrency(monthTotals.charged)}
+                            </td>
+                            <td className="py-2 pe-3">{formatCurrency(monthTotals.paid)}</td>
+                            <td className="py-2 pe-3">
+                                {formatCurrency(monthTotals.remaining)}
+                            </td>
+                            <td className="py-2" />
+                        </tr>
+                    </tfoot>
+                )}
+            </table>
+        </div>
+    );
+
+    if (isResultsView && selected === 'month-subscription') {
+        return (
+            <AdminLayout title="Συνδρομή μήνα — Αποτελέσματα">
+                <Head title="Συνδρομή μήνα — Αποτελέσματα" />
+                <section className="rounded-lg border border-ts-border bg-ts-surface p-4">
+                    <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <h1 className="text-xl font-semibold text-ts-fg">
+                                Συνδρομή μήνα — Αποτελέσματα
+                            </h1>
+                            <p className="text-sm text-ts-muted">
+                                Αποτελέσματα αναζήτησης σε νέο παράθυρο.
+                            </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                onClick={exportCsv}
+                                className="rounded-md border border-ts-border px-3 py-1.5 text-sm hover:bg-ts-hover"
+                            >
+                                Εξαγωγή XLSX
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => window.print()}
+                                className="rounded-md bg-ts-accent px-3 py-1.5 text-sm text-ts-accent-fg"
+                            >
+                                Εκτύπωση
+                            </button>
+                        </div>
+                    </div>
+                    {resultsTable}
+                </section>
+            </AdminLayout>
+        );
+    }
 
     return (
         <AdminLayout title="Εκτύπωση">
@@ -256,7 +455,7 @@ export default function Index({
                                 {selected === 'athletes-registry'
                                     ? 'Φίλτρα αναζήτησης και εκτύπωση λίστας. Η «Χρέωση μήνα = Όχι» δείχνει μόνο αθλητές με απενεργοποιημένη μηνιαία χρέωση στο προφίλ.'
                                     : selected === 'month-subscription'
-                                      ? 'Ποιοι έχουν πληρώσει τη μηνιαία συνδρομή συγκεκριμένου μήνα και ποιοι όχι.'
+                                      ? 'Ποιοι έχουν πληρώσει τη μηνιαία συνδρομή συγκεκριμένου μήνα και ποιοι όχι. Η αναζήτηση ανοίγει τα αποτελέσματα σε νέο παράθυρο.'
                                       : selected === 'legal-forms'
                                         ? 'Εκτύπωση φόρμας συναίνεσης GDPR και φόρμας εγγραφής αθλητή.'
                                         : 'Φίλτρα · Αναζήτηση · Εξαγωγή XLSX · Εκτύπωση'}
@@ -455,136 +654,25 @@ export default function Index({
                             <button
                                 type="button"
                                 className="rounded-md bg-ts-accent px-3 py-1.5 text-sm text-ts-accent-fg"
-                                onClick={() => setShowResults(true)}
+                                onClick={runSearch}
                             >
                                 Αναζήτηση
                             </button>
-                            {selected === 'month-subscription' && showResults ? (
-                                <p className="mt-2 text-xs text-ts-muted">{monthSummary}</p>
+                            {opensResultsInNewWindow ? (
+                                <p className="mt-2 text-xs text-ts-muted">
+                                    Τα αποτελέσματα ανοίγουν σε νέο παράθυρο.
+                                </p>
                             ) : null}
                         </div>
                     </div>
 
-                    {showResults ||
-                    selected === 'athletes-registry' ||
-                    selected === 'month-subscription' ||
-                    selected === 'medical-data' ||
-                    selected === 'debtors' ? (
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full text-sm print:text-black">
-                                <thead>
-                                    <tr className="text-left text-xs uppercase text-ts-muted">
-                                        <th className="py-1 pe-3">#</th>
-                                        <th className="py-1 pe-3">Επώνυμο</th>
-                                        <th className="py-1 pe-3">Όνομα</th>
-                                        {selected === 'month-subscription' ? (
-                                            <>
-                                                <th className="py-1 pe-3">Τμήμα</th>
-                                                <th className="py-1 pe-3">Κατάσταση</th>
-                                                <th className="py-1 pe-3">Χρέωση</th>
-                                                <th className="py-1 pe-3">Πληρωμή</th>
-                                                <th className="py-1 pe-3">Υπόλοιπο μήνα</th>
-                                                <th className="py-1">Τηλ. γονέα</th>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <th className="py-1 pe-3">Άθλημα</th>
-                                                <th className="py-1">Τμήμα</th>
-                                            </>
-                                        )}
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {filtered.map((a, index) => (
-                                        <tr key={a.id} className="border-t border-ts-border">
-                                            <td className="py-1.5 pe-3">{index + 1}</td>
-                                            <td className="py-1.5 pe-3">
-                                                <a
-                                                    href={route('admin.athletes.show', a.id)}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="font-medium text-ts-accent hover:underline"
-                                                >
-                                                    {a.last_name}
-                                                </a>
-                                            </td>
-                                            <td className="py-1.5 pe-3">
-                                                <a
-                                                    href={route('admin.athletes.show', a.id)}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="font-medium text-ts-accent hover:underline"
-                                                >
-                                                    {a.first_name}
-                                                </a>
-                                            </td>
-                                            {selected === 'month-subscription' ? (
-                                                <>
-                                                    <td className="py-1.5 pe-3">
-                                                        {a.class_names || '—'}
-                                                    </td>
-                                                    <td className="py-1.5 pe-3">
-                                                        {a.month_pay_status_label}
-                                                    </td>
-                                                    <td className="py-1.5 pe-3">
-                                                        {formatCurrency(a.month_charged || 0)}
-                                                    </td>
-                                                    <td className="py-1.5 pe-3">
-                                                        {formatCurrency(a.month_paid || 0)}
-                                                    </td>
-                                                    <td className="py-1.5 pe-3">
-                                                        {formatCurrency(a.month_remaining || 0)}
-                                                    </td>
-                                                    <td className="py-1.5">
-                                                        {a.guardian_phone || a.phone || ''}
-                                                    </td>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <td className="py-1.5 pe-3">{a.sport || '—'}</td>
-                                                    <td className="py-1.5">{a.class_names || '—'}</td>
-                                                </>
-                                            )}
-                                        </tr>
-                                    ))}
-                                    {!filtered.length && (
-                                        <tr>
-                                            <td
-                                                colSpan={9}
-                                                className="py-8 text-center text-ts-muted"
-                                            >
-                                                Δεν βρέθηκαν εγγραφές με αυτά τα φίλτρα.
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                                {selected === 'month-subscription' &&
-                                    filtered.length > 0 &&
-                                    monthTotals && (
-                                        <tfoot>
-                                            <tr className="border-t-2 border-ts-border bg-ts-surface-2/60 font-semibold text-ts-fg">
-                                                <td className="py-2 pe-3" colSpan={5}>
-                                                    Σύνολα ({filtered.length})
-                                                </td>
-                                                <td className="py-2 pe-3">
-                                                    {formatCurrency(monthTotals.charged)}
-                                                </td>
-                                                <td className="py-2 pe-3">
-                                                    {formatCurrency(monthTotals.paid)}
-                                                </td>
-                                                <td className="py-2 pe-3">
-                                                    {formatCurrency(monthTotals.remaining)}
-                                                </td>
-                                                <td className="py-2" />
-                                            </tr>
-                                        </tfoot>
-                                    )}
-                            </table>
-                        </div>
+                    {showInlineResults ? (
+                        resultsTable
                     ) : (
                         <div className="rounded-md border border-dashed border-ts-border px-4 py-10 text-center text-sm text-ts-muted">
-                            Προεπισκόπηση «{current.title}» — πατήστε Αναζήτηση ή χρησιμοποιήστε
-                            Εκτύπωση / Εξαγωγή με τα κοινά φίλτρα.
+                            {opensResultsInNewWindow
+                                ? 'Ορίστε τα φίλτρα και πατήστε Αναζήτηση για να ανοίξουν τα αποτελέσματα σε νέο παράθυρο.'
+                                : `Προεπισκόπηση «${current.title}» — πατήστε Αναζήτηση ή χρησιμοποιήστε Εκτύπωση / Εξαγωγή με τα κοινά φίλτρα.`}
                         </div>
                     )}
                 </section>
