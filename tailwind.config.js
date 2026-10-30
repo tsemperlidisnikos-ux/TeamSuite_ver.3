@@ -13,8 +13,8 @@ export default {
     theme: {
         extend: {
             fontFamily: {
-                sans: ['Manrope', 'sans-serif', ...defaultTheme.fontFamily.sans],
-                display: ['Sora', 'Manrope', 'sans-serif', ...defaultTheme.fontFamily.sans],
+                sans: ['Sora', 'sans-serif', ...defaultTheme.fontFamily.sans],
+                display: ['Sora', 'sans-serif', ...defaultTheme.fontFamily.sans],
             },
             colors: {
                 ts: {
