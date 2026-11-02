@@ -41,7 +41,7 @@ export default function Clubs({ clubs, packages = [] }) {
                                 <td className="px-3 py-3 text-ts-muted">{c.slug}</td>
                                 <td className="px-3 py-3">
                                     <select
-                                        className="max-w-[14rem] rounded border border-ts-border bg-ts-surface px-2 py-1.5 text-sm text-ts-fg"
+                                        className="min-w-[20rem] max-w-[28rem] w-full rounded border border-ts-border bg-ts-surface px-2 py-1.5 text-sm text-ts-fg"
                                         value={c.license_package_id || ''}
                                         onChange={(e) => assignLicense(c.id, e.target.value)}
                                     >
