@@ -46,6 +46,7 @@ class DashboardController extends Controller
                 : null,
             'platformConfig' => $this->configForInertia($config->get()),
             'hostingCost' => $hosting->snapshot(),
+            'loginHistory' => LoginActivityController::mappedRows(),
             'catalogs' => [
                 'academyModules' => Navigation::academyModules(),
                 'financeTabs' => $config->financeTabsCatalog(),

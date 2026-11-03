@@ -285,6 +285,8 @@ Route::middleware(['auth', 'verified', 'platform'])->prefix('platform')->name('p
     Route::patch('/waitlist/{id}', [WaitlistController::class, 'update'])->name('waitlist.update');
     Route::delete('/waitlist/{id}', [WaitlistController::class, 'destroy'])->name('waitlist.destroy');
     Route::get('/logins', [LoginActivityController::class, 'index'])->name('logins.index');
+    Route::delete('/logins/{login}', [LoginActivityController::class, 'destroy'])->name('logins.destroy');
+    Route::delete('/logins', [LoginActivityController::class, 'destroyAll'])->name('logins.destroy-all');
     Route::get('/activity', [ClubActivityLogController::class, 'index'])->name('activity.index');
     Route::get('/license-packages', [LicensePackageController::class, 'index'])->name('license-packages.index');
     Route::post('/license-packages', [LicensePackageController::class, 'store'])->name('license-packages.store');

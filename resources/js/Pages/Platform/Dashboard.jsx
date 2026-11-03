@@ -1,3 +1,4 @@
+import LoginHistoryPanel from '@/Components/Platform/LoginHistoryPanel';
 import PlatformLayout from '@/Layouts/PlatformLayout';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
@@ -17,7 +18,7 @@ const NAV = {
                 items: [
                     { id: 'users', label: 'Επιλογή χρηστών', hint: 'Ρόλοι / είσοδος ως χρήστης' },
                     { id: 'waitlist', label: 'Λίστα αναμονής ακαδημιών', hint: 'Αιτήσεις /register' },
-                    { id: 'logins', label: 'Ιστορικό εισόδων', hint: 'Φίλτρο συλλόγου' },
+                    { id: 'logins', label: 'Ιστορικό εισόδων', hint: 'Συνδέσεις χρηστών / φίλτρο συλλόγου' },
                     { id: 'club-log', label: 'Ημερολόγιο συλλόγου', hint: 'Κινήσεις ανά ημέρα' },
                     { id: 'jpegs', label: 'Φόρμες δημόσιας εγγραφής', hint: 'URL / εγγραφές' },
                     { id: 'health-cards', label: 'Κάρτες υγείας ανά άθλημα', hint: 'PDF προτύπου' },
@@ -198,6 +199,7 @@ export default function Dashboard({
     catalogs,
     activePreview = null,
     hostingCost = null,
+    loginHistory = [],
 }) {
     const page = usePage();
     const initial = initialNav(page.url);
@@ -392,10 +394,10 @@ export default function Dashboard({
                             />
                         )}
                         {activeItem?.id === 'logins' && (
-                            <QuickLink
-                                href={route('platform.logins.index')}
-                                label="Άνοιγμα ιστορικού εισόδων"
-                                body="Έλεγχος συνδέσεων χρηστών στην πλατφόρμα."
+                            <LoginHistoryPanel
+                                rows={loginHistory}
+                                clubs={clubs}
+                                embedded
                             />
                         )}
                         {activeItem?.id === 'club-log' && (

@@ -26,4 +26,9 @@ class LoginActivity extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    public function club(): BelongsTo
+    {
+        return $this->belongsTo(Club::class);
+    }
 }

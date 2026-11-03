@@ -13,10 +13,10 @@ export default function PlatformLayout({ title = 'Διαχείριση', childre
     const nav = [
         { id: 'manage', label: 'Διαχείριση', href: platformHref('platform.dashboard', '/platform') },
         { id: 'users', label: 'Χρήστες', href: platformHref('platform.users.index', '/platform/users') },
-        { id: 'packages', label: 'Πακέτο αδειών', href: platformHref('platform.license-packages.index', '/platform/license-packages') },
-        { id: 'clubs', label: 'Σύλλογοι', href: platformHref('platform.clubs.index', '/platform/clubs') },
+        { id: 'packages', label: 'Πακέτα αδειών', href: platformHref('platform.license-packages.index', '/platform/license-packages') },
         { id: 'waitlist', label: 'Λίστα αναμονής', href: platformHref('platform.waitlist.index', '/platform/waitlist') },
         { id: 'logins', label: 'Ιστορικό εισόδων', href: platformHref('platform.logins.index', '/platform/logins') },
+        { id: 'clubs', label: 'Σύλλογοι', href: platformHref('platform.clubs.index', '/platform/clubs') },
         { id: 'activity', label: 'Ημερολόγιο συλλόγου', href: platformHref('platform.activity.index', '/platform/activity') },
     ];
 
