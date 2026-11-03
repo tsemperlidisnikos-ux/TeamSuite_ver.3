@@ -89,16 +89,41 @@ function normalizeRule(rule, facilityId) {
     };
 }
 
-function readImageFile(file) {
+function readImageFile(file, { maxEdge = 1280, quality = 0.82 } = {}) {
     return new Promise((resolve, reject) => {
         if (!file) {
             resolve(null);
             return;
         }
-        const reader = new FileReader();
-        reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : null);
-        reader.onerror = () => reject(new Error('Αποτυχία ανάγνωσης αρχείου'));
-        reader.readAsDataURL(file);
+
+        const objectUrl = URL.createObjectURL(file);
+        const image = new Image();
+        image.onload = () => {
+            try {
+                const scale = Math.min(1, maxEdge / Math.max(image.width || 1, image.height || 1));
+                const width = Math.max(1, Math.round((image.width || 1) * scale));
+                const height = Math.max(1, Math.round((image.height || 1) * scale));
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    reject(new Error('Αποτυχία επεξεργασίας εικόνας'));
+                    return;
+                }
+                ctx.drawImage(image, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', quality));
+            } catch (error) {
+                reject(error instanceof Error ? error : new Error('Αποτυχία επεξεργασίας εικόνας'));
+            } finally {
+                URL.revokeObjectURL(objectUrl);
+            }
+        };
+        image.onerror = () => {
+            URL.revokeObjectURL(objectUrl);
+            reject(new Error('Αποτυχία ανάγνωσης αρχείου'));
+        };
+        image.src = objectUrl;
     });
 }
 

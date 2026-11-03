@@ -7,6 +7,7 @@ use App\Models\Club;
 use App\Models\Facility;
 use App\Models\RentalBooking;
 use App\Models\RentalSetting;
+use App\Support\ClubPublicMedia;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -50,7 +51,9 @@ class RentController extends Controller
                     return [
                         'id' => $facility->id,
                         'name' => $facility->name,
-                        'photoUrl' => $meta['photoUrl'] ?? $meta['photo_url'] ?? null,
+                        'photoUrl' => ClubPublicMedia::publicUrl(
+                            isset($meta['photoUrl']) ? (string) $meta['photoUrl'] : (isset($meta['photo_url']) ? (string) $meta['photo_url'] : null)
+                        ),
                         'slotMinutes' => (int) ($rule['slotMinutes'] ?? 60) ?: 60,
                         'windows' => $this->normalizeWindows($rule['windows'] ?? null),
                     ];
@@ -81,7 +84,7 @@ class RentController extends Controller
                 'name' => $club->name,
                 'slug' => $club->slug,
                 'logo_url' => $club->logo_path ? Storage::disk('public')->url($club->logo_path) : null,
-                'heroImageUrl' => $rulesPayload['heroImageUrl'],
+                'heroImageUrl' => ClubPublicMedia::publicUrl($rulesPayload['heroImageUrl']),
                 'notes' => $rulesPayload['notes'],
             ],
             'publicEnabled' => $publicEnabled,

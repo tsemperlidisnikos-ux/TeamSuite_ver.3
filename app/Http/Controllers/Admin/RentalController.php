@@ -11,6 +11,7 @@ use App\Models\ScheduleSlot;
 use App\Models\SportMatch;
 use App\Models\Training;
 use App\Services\Audit\ClubActivityLogger;
+use App\Support\ClubPublicMedia;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -72,7 +73,9 @@ class RentalController extends ClubResourceController
                     'id' => $facility->id,
                     'name' => $facility->name,
                     'is_rentable' => (bool) $facility->is_rentable,
-                    'photoUrl' => $meta['photoUrl'] ?? $meta['photo_url'] ?? null,
+                    'photoUrl' => ClubPublicMedia::publicUrl(
+                        isset($meta['photoUrl']) ? (string) $meta['photoUrl'] : (isset($meta['photo_url']) ? (string) $meta['photo_url'] : null)
+                    ),
                     'sports' => array_values(array_map('strval', $sports)),
                 ];
             })
@@ -196,7 +199,7 @@ class RentalController extends ClubResourceController
             'rentalRules' => $rulesPayload['rules'],
             'publicRentEnabled' => (bool) ($rentalSettings?->public_enabled ?? false),
             'rentalNotes' => $rulesPayload['notes'],
-            'heroImageUrl' => $rulesPayload['heroImageUrl'],
+            'heroImageUrl' => ClubPublicMedia::publicUrl($rulesPayload['heroImageUrl']),
             'uncollectedCount' => $uncollected->count(),
             'uncollected' => $uncollected,
             'upcomingBookings' => $upcomingBookings,
@@ -554,9 +557,13 @@ class RentalController extends ClubResourceController
                 ? (string) ($data['notes'] ?? '')
                 : $existingPayload['notes'],
             'heroImageUrl' => array_key_exists('hero_image_url', $data)
-                ? ($data['hero_image_url'] !== null && $data['hero_image_url'] !== ''
-                    ? (string) $data['hero_image_url']
-                    : null)
+                ? ClubPublicMedia::normalizeForStorage(
+                    $data['hero_image_url'] !== null && $data['hero_image_url'] !== ''
+                        ? (string) $data['hero_image_url']
+                        : null,
+                    $clubId,
+                    'club-media/rent-hero',
+                )
                 : $existingPayload['heroImageUrl'],
         ];
 
@@ -590,7 +597,11 @@ class RentalController extends ClubResourceController
             $meta = is_array($facility->meta) ? $facility->meta : [];
             if (array_key_exists('photoUrl', $facilityPayload)) {
                 $photo = $facilityPayload['photoUrl'];
-                $meta['photoUrl'] = $photo !== null && $photo !== '' ? (string) $photo : null;
+                $meta['photoUrl'] = ClubPublicMedia::normalizeForStorage(
+                    $photo !== null && $photo !== '' ? (string) $photo : null,
+                    $clubId,
+                    'club-media/facilities',
+                );
                 unset($meta['photo_url']);
             }
             if (array_key_exists('sports', $facilityPayload) && is_array($facilityPayload['sports'])) {

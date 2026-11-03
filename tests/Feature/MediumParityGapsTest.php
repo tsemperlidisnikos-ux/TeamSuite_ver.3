@@ -197,10 +197,11 @@ class MediumParityGapsTest extends TestCase
                         ],
                     ],
                 ],
+                'hero_image_url' => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
                 'facilities' => [
                     [
                         'id' => $facility->id,
-                        'photoUrl' => null,
+                        'photoUrl' => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
                         'is_rentable' => true,
                         'sports' => ['Βόλεϊ', 'Μπάσκετ'],
                     ],
@@ -215,9 +216,13 @@ class MediumParityGapsTest extends TestCase
         $this->assertSame($facility->id, $settings->rules['rules'][0]['facilityId'] ?? null);
         $this->assertTrue((bool) ($settings->rules['rules'][0]['enabled'] ?? false));
         $this->assertEquals(40.0, (float) ($settings->rules['rules'][0]['hourlyRateFull'] ?? 0));
+        $this->assertNotNull($settings->rules['heroImageUrl'] ?? null);
+        $this->assertStringNotContainsString('data:image', (string) ($settings->rules['heroImageUrl'] ?? ''));
 
         $facility->refresh();
         $this->assertTrue((bool) $facility->is_rentable);
+        $this->assertNotNull($facility->meta['photoUrl'] ?? null);
+        $this->assertStringNotContainsString('/api/club-media', (string) ($facility->meta['photoUrl'] ?? ''));
 
         $clubSettings = ClubSetting::query()->where('club_id', $club->id)->first();
         $this->assertNotNull($clubSettings);
