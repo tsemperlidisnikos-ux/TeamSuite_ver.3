@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Models\ClubSetting;
 use App\Models\Facility;
 use App\Models\RentalBooking;
 use App\Models\RentalSetting;
@@ -559,15 +560,21 @@ class RentalController extends ClubResourceController
                 : $existingPayload['heroImageUrl'],
         ];
 
+        $publicEnabled = array_key_exists('public_enabled', $data)
+            ? (bool) $data['public_enabled']
+            : (bool) ($existing?->public_enabled ?? false);
+
         RentalSetting::query()->updateOrCreate(
             ['club_id' => $clubId],
             [
-                'public_enabled' => array_key_exists('public_enabled', $data)
-                    ? (bool) $data['public_enabled']
-                    : (bool) ($existing?->public_enabled ?? false),
+                'public_enabled' => $publicEnabled,
                 'rules' => $payload,
             ],
         );
+
+        $clubSettings = ClubSetting::query()->firstOrNew(['club_id' => $clubId]);
+        $clubSettings->public_rent_enabled = $publicEnabled;
+        $clubSettings->save();
 
         foreach ($data['facilities'] ?? [] as $facilityPayload) {
             $facilityId = (string) ($facilityPayload['id'] ?? '');

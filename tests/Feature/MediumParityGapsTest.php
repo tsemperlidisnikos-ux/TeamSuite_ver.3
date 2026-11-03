@@ -7,6 +7,7 @@ use App\Models\AthleteTransaction;
 use App\Models\CashAccount;
 use App\Models\Club;
 use App\Models\ClubMember;
+use App\Models\ClubSetting;
 use App\Models\Facility;
 use App\Models\RentalSetting;
 use App\Models\User;
@@ -217,6 +218,18 @@ class MediumParityGapsTest extends TestCase
 
         $facility->refresh();
         $this->assertTrue((bool) $facility->is_rentable);
+
+        $clubSettings = ClubSetting::query()->where('club_id', $club->id)->first();
+        $this->assertNotNull($clubSettings);
+        $this->assertTrue((bool) $clubSettings->public_rent_enabled);
+
+        $this->get(route('public.rent.show', $club->slug))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Public/Rent')
+                ->where('publicEnabled', true)
+                ->has('facilities', 1)
+            );
     }
 
     public function test_doctor_dashboard_view(): void

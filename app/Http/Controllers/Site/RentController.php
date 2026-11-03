@@ -20,8 +20,10 @@ class RentController extends Controller
         $club = Club::query()->where('slug', $slug)->where('is_active', true)->firstOrFail();
         $clubSettings = $club->settings()->first();
         $rentalSettings = RentalSetting::query()->where('club_id', $club->id)->first();
-        $publicEnabled = (bool) ($clubSettings?->public_rent_enabled ?? false)
-            && (bool) ($rentalSettings?->public_enabled ?? true);
+        // Rentals UI owns public_enabled; club_settings is kept in sync / used as fallback.
+        $publicEnabled = $rentalSettings !== null
+            ? (bool) $rentalSettings->public_enabled
+            : (bool) ($clubSettings?->public_rent_enabled ?? false);
 
         $rulesPayload = $this->normalizeRulesPayload($rentalSettings?->rules);
         $rulesByFacility = $this->rulesByFacilityId($rulesPayload['rules']);
@@ -94,11 +96,10 @@ class RentController extends Controller
         $club = Club::query()->where('slug', $slug)->where('is_active', true)->firstOrFail();
         $clubSettings = $club->settings()->first();
         $rentalSettings = RentalSetting::query()->where('club_id', $club->id)->first();
-        abort_unless(
-            (bool) ($clubSettings?->public_rent_enabled ?? false) && (bool) ($rentalSettings?->public_enabled ?? true),
-            403,
-            'Η δημόσια ενοικίαση δεν είναι ενεργή.'
-        );
+        $publicEnabled = $rentalSettings !== null
+            ? (bool) $rentalSettings->public_enabled
+            : (bool) ($clubSettings?->public_rent_enabled ?? false);
+        abort_unless($publicEnabled, 403, 'Η δημόσια ενοικίαση δεν είναι ενεργή.');
 
         $data = $request->validate([
             'facility_id' => 'nullable|uuid',

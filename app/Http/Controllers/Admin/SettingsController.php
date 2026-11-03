@@ -14,6 +14,7 @@ use App\Models\Coach;
 use App\Models\DiscountReason;
 use App\Models\Facility;
 use App\Models\ReceiptSeries;
+use App\Models\RentalSetting;
 use App\Models\SizeChart;
 use App\Models\Sport;
 use App\Models\User;
@@ -449,8 +450,14 @@ class SettingsController extends Controller
             'autoApprove' => false,
         ]);
         $settings->public_join_enabled = $enabled;
-        $settings->public_rent_enabled = filter_var($data['public_rent_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $publicRentEnabled = filter_var($data['public_rent_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $settings->public_rent_enabled = $publicRentEnabled;
         $settings->save();
+
+        RentalSetting::query()->updateOrCreate(
+            ['club_id' => $club->id],
+            ['public_enabled' => $publicRentEnabled],
+        );
 
         return $this->backTab('publicRegistration', 'Οι ρυθμίσεις δημόσιας εγγραφής αποθηκεύτηκαν.');
     }
