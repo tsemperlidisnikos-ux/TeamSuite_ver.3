@@ -37,17 +37,27 @@ class DashboardController extends Controller
         $dashboard = $metrics->forClub($clubId);
 
         $activeAthletes = collect($dashboard['bySport'])->sum('athletes');
+        $permissions = $request->user()?->permissionsInClub($club) ?? [];
+        $showFinance = $request->user()?->is_platform_admin
+            || $role === Roles::ADMIN
+            || in_array('finance', $permissions, true);
+        $showRentals = $request->user()?->is_platform_admin
+            || in_array('rental', $permissions, true);
 
-        $rentalsToday = RentalBooking::query()->withoutGlobalScopes()
-            ->where('club_id', $clubId)
-            ->whereDate('starts_at', $today)
-            ->whereNotIn('status', ['cancelled', 'rejected'])
-            ->count();
+        $rentalsToday = $showRentals
+            ? RentalBooking::query()->withoutGlobalScopes()
+                ->where('club_id', $clubId)
+                ->whereDate('starts_at', $today)
+                ->whereNotIn('status', ['cancelled', 'rejected'])
+                ->count()
+            : 0;
 
-        $pendingApplications = RegistrationApplication::query()->withoutGlobalScopes()
-            ->where('club_id', $clubId)
-            ->whereIn('status', ['pending', 'new', 'waiting'])
-            ->count();
+        $pendingApplications = in_array('athletes', $permissions, true) || $role === Roles::ADMIN
+            ? RegistrationApplication::query()->withoutGlobalScopes()
+                ->where('club_id', $clubId)
+                ->whereIn('status', ['pending', 'new', 'waiting'])
+                ->count()
+            : 0;
 
         $season = ClubSeason::query()->withoutGlobalScopes()
             ->where('club_id', $clubId)
@@ -62,6 +72,8 @@ class DashboardController extends Controller
                 'slug' => $club->slug,
             ],
             'seasonName' => $season?->name,
+            'showFinance' => $showFinance,
+            'showRentals' => $showRentals,
             'kpis' => [
                 'activeAthletes' => (int) $activeAthletes,
                 'athleteCap' => $athleteCap,
@@ -69,10 +81,10 @@ class DashboardController extends Controller
                 'pendingApplications' => $pendingApplications,
             ],
             'bySport' => $dashboard['bySport'],
-            'money' => $dashboard['money'],
-            'financeBySport' => $dashboard['financeBySport'],
-            'till' => $dashboard['till'],
-            'uncollectedRentals' => $dashboard['uncollectedRentals'],
+            'money' => $showFinance ? $dashboard['money'] : null,
+            'financeBySport' => $showFinance ? $dashboard['financeBySport'] : [],
+            'till' => $showFinance ? $dashboard['till'] : null,
+            'uncollectedRentals' => $showRentals ? $dashboard['uncollectedRentals'] : null,
             'doctor' => null,
         ]);
     }

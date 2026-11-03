@@ -165,6 +165,8 @@ export default function Dashboard({
     till,
     uncollectedRentals,
     doctor,
+    showFinance = true,
+    showRentals = true,
 }) {
     if (view === 'doctor') {
         return <DoctorDashboard doctor={doctor} />;
@@ -189,7 +191,7 @@ export default function Dashboard({
                 </p>
             </div>
 
-            {uncollectedCount > 0 && (
+            {showRentals && uncollectedCount > 0 && (
                 <Link
                     href={route('admin.rentals.index')}
                     className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 transition hover:border-amber-400 hover:bg-amber-100"
@@ -227,19 +229,21 @@ export default function Dashboard({
                     }
                     labelClass="text-xs text-ts-muted"
                 />
-                <Kpi
-                    label="Κράτηση γηπέδου"
-                    value={kpis.rentalsToday > 0 ? 'Ναι' : 'Όχι'}
-                    hint={
-                        kpis.rentalsToday > 0
-                            ? kpis.rentalsToday === 1
-                                ? '1 κράτηση σήμερα'
-                                : `${kpis.rentalsToday} κρατήσεις σήμερα`
-                            : 'Καμία κράτηση σήμερα'
-                    }
-                    href={route('admin.rentals.index')}
-                    labelClass="text-xs text-ts-muted"
-                />
+                {showRentals ? (
+                    <Kpi
+                        label="Κράτηση γηπέδου"
+                        value={kpis.rentalsToday > 0 ? 'Ναι' : 'Όχι'}
+                        hint={
+                            kpis.rentalsToday > 0
+                                ? kpis.rentalsToday === 1
+                                    ? '1 κράτηση σήμερα'
+                                    : `${kpis.rentalsToday} κρατήσεις σήμερα`
+                                : 'Καμία κράτηση σήμερα'
+                        }
+                        href={route('admin.rentals.index')}
+                        labelClass="text-xs text-ts-muted"
+                    />
+                ) : null}
                 <Kpi
                     label="Αιτήσεις εγγραφής"
                     value={kpis.pendingApplications}
@@ -297,104 +301,120 @@ export default function Dashboard({
                 </div>
             </section>
 
-            <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <Kpi
-                    label="ΤΑΜΕΙΟ"
-                    value={`${euro(money?.cash)} €`}
-                    labelClass="text-xs font-semibold uppercase tracking-wide text-ts-muted"
-                />
-                <Kpi
-                    label="ΟΦΕΙΛΕΣ"
-                    value={`${euro(money?.debts)} €`}
-                    href={route('admin.fees.index')}
-                    labelClass="text-xs font-semibold uppercase tracking-wide text-ts-muted"
-                />
-                <Kpi
-                    label="ΕΣΟΔΑ ΗΜΕΡΑΣ"
-                    value={<span className="text-teal-700">{`${euro(money?.revenueToday)} €`}</span>}
-                    href={route('admin.finance.index')}
-                    labelClass="text-xs font-semibold uppercase tracking-wide text-ts-muted"
-                />
-                <Kpi
-                    label="ΕΙΣΠΡΑΞΕΙΣ ΜΗΝΑ"
-                    value={
-                        <span className="text-teal-700">{`${euro(money?.collectionsMonth)} €`}</span>
-                    }
-                    labelClass="text-xs font-semibold uppercase tracking-wide text-ts-muted"
-                />
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-2">
-                <section className="rounded-lg border border-ts-border bg-ts-surface p-4">
-                    <div className="mb-3">
-                        <h3 className="text-base font-semibold text-ts-fg">Οικονομικά ανά άθλημα</h3>
-                        <p className="text-xs text-ts-muted">Τρέχων μήνας</p>
-                    </div>
-                    <table className="min-w-full text-sm">
-                        <thead className="text-left text-[11px] uppercase tracking-wide text-ts-muted">
-                            <tr>
-                                <th className="pb-2 pe-3">Άθλημα</th>
-                                <th className="pb-2 pe-3">Εισπράξεις μήνα</th>
-                                <th className="pb-2">Ανοιχτές οφειλές</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {(financeBySport || []).map((row) => (
-                                <tr key={row.sport} className="border-t border-ts-border">
-                                    <td className="py-2 pe-3 text-ts-fg">{row.sport}</td>
-                                    <td className="py-2 pe-3 text-ts-fg-soft">{euro(row.collected)} €</td>
-                                    <td className="py-2 text-ts-fg-soft">{euro(row.owed)} €</td>
-                                </tr>
-                            ))}
-                            {!financeBySport?.length && (
-                                <tr>
-                                    <td colSpan={3} className="py-6 text-center text-ts-muted">
-                                        Δεν υπάρχουν οικονομικά ανά άθλημα.
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                        {financeBySport?.length > 0 && (
-                            <tfoot>
-                                <tr className="border-t border-ts-border text-ts-fg">
-                                    <td className="py-2 pe-3 font-medium">Σύνολο</td>
-                                    <td className="py-2 pe-3 font-medium">{euro(financeCollected)} €</td>
-                                    <td className="py-2 font-medium">{euro(financeOwed)} €</td>
-                                </tr>
-                            </tfoot>
-                        )}
-                    </table>
-                </section>
-
-                <section className="rounded-lg border border-ts-border bg-ts-surface p-4">
-                    <div className="mb-3 flex items-center justify-between gap-2">
-                        <div>
-                            <h3 className="text-base font-semibold text-ts-fg">Ταμείο ημέρας</h3>
-                            <p className="text-xs text-ts-muted">{formatDayMonthYear(till?.date)}</p>
-                        </div>
-                        <Link
+            {showFinance ? (
+                <>
+                    <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        <Kpi
+                            label="ΤΑΜΕΙΟ"
+                            value={`${euro(money?.cash)} €`}
+                            labelClass="text-xs font-semibold uppercase tracking-wide text-ts-muted"
+                        />
+                        <Kpi
+                            label="ΟΦΕΙΛΕΣ"
+                            value={`${euro(money?.debts)} €`}
+                            href={route('admin.fees.index')}
+                            labelClass="text-xs font-semibold uppercase tracking-wide text-ts-muted"
+                        />
+                        <Kpi
+                            label="ΕΣΟΔΑ ΗΜΕΡΑΣ"
+                            value={
+                                <span className="text-teal-700">{`${euro(money?.revenueToday)} €`}</span>
+                            }
                             href={route('admin.finance.index')}
-                            className="text-sm text-ts-accent hover:text-sky-300"
-                        >
-                            Οικονομικά →
-                        </Link>
+                            labelClass="text-xs font-semibold uppercase tracking-wide text-ts-muted"
+                        />
+                        <Kpi
+                            label="ΕΙΣΠΡΑΞΕΙΣ ΜΗΝΑ"
+                            value={
+                                <span className="text-teal-700">
+                                    {`${euro(money?.collectionsMonth)} €`}
+                                </span>
+                            }
+                            labelClass="text-xs font-semibold uppercase tracking-wide text-ts-muted"
+                        />
                     </div>
-                    <dl className="space-y-3 text-sm">
-                        <div className="flex justify-between border-b border-ts-border pb-2">
-                            <dt className="text-ts-muted">Εισπράξεις ημέρας</dt>
-                            <dd className="text-ts-fg">{euro(till?.collections)} €</dd>
-                        </div>
-                        <div className="flex justify-between border-b border-ts-border pb-2">
-                            <dt className="text-ts-muted">Έσοδα ημέρας</dt>
-                            <dd className="text-ts-fg">{euro(till?.revenues)} €</dd>
-                        </div>
-                        <div className="flex justify-between">
-                            <dt className="text-ts-muted">Ενοικιάσεις ημέρας</dt>
-                            <dd className="text-ts-fg">{euro(till?.rentals)} €</dd>
-                        </div>
-                    </dl>
-                </section>
-            </div>
+
+                    <div className="grid gap-4 lg:grid-cols-2">
+                        <section className="rounded-lg border border-ts-border bg-ts-surface p-4">
+                            <div className="mb-3">
+                                <h3 className="text-base font-semibold text-ts-fg">
+                                    Οικονομικά ανά άθλημα
+                                </h3>
+                                <p className="text-xs text-ts-muted">Τρέχων μήνας</p>
+                            </div>
+                            <table className="min-w-full text-sm">
+                                <thead className="text-left text-[11px] uppercase tracking-wide text-ts-muted">
+                                    <tr>
+                                        <th className="pb-2 pe-3">Άθλημα</th>
+                                        <th className="pb-2 pe-3">Εισπράξεις μήνα</th>
+                                        <th className="pb-2">Ανοιχτές οφειλές</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {(financeBySport || []).map((row) => (
+                                        <tr key={row.sport} className="border-t border-ts-border">
+                                            <td className="py-2 pe-3 text-ts-fg">{row.sport}</td>
+                                            <td className="py-2 pe-3 text-ts-fg-soft">
+                                                {euro(row.collected)} €
+                                            </td>
+                                            <td className="py-2 text-ts-fg-soft">{euro(row.owed)} €</td>
+                                        </tr>
+                                    ))}
+                                    {!financeBySport?.length && (
+                                        <tr>
+                                            <td colSpan={3} className="py-6 text-center text-ts-muted">
+                                                Δεν υπάρχουν οικονομικά ανά άθλημα.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                                {financeBySport?.length > 0 && (
+                                    <tfoot>
+                                        <tr className="border-t border-ts-border text-ts-fg">
+                                            <td className="py-2 pe-3 font-medium">Σύνολο</td>
+                                            <td className="py-2 pe-3 font-medium">
+                                                {euro(financeCollected)} €
+                                            </td>
+                                            <td className="py-2 font-medium">{euro(financeOwed)} €</td>
+                                        </tr>
+                                    </tfoot>
+                                )}
+                            </table>
+                        </section>
+
+                        <section className="rounded-lg border border-ts-border bg-ts-surface p-4">
+                            <div className="mb-3 flex items-center justify-between gap-2">
+                                <div>
+                                    <h3 className="text-base font-semibold text-ts-fg">Ταμείο ημέρας</h3>
+                                    <p className="text-xs text-ts-muted">
+                                        {formatDayMonthYear(till?.date)}
+                                    </p>
+                                </div>
+                                <Link
+                                    href={route('admin.finance.index')}
+                                    className="text-sm text-ts-accent hover:text-sky-300"
+                                >
+                                    Οικονομικά →
+                                </Link>
+                            </div>
+                            <dl className="space-y-3 text-sm">
+                                <div className="flex justify-between border-b border-ts-border pb-2">
+                                    <dt className="text-ts-muted">Εισπράξεις ημέρας</dt>
+                                    <dd className="text-ts-fg">{euro(till?.collections)} €</dd>
+                                </div>
+                                <div className="flex justify-between border-b border-ts-border pb-2">
+                                    <dt className="text-ts-muted">Έσοδα ημέρας</dt>
+                                    <dd className="text-ts-fg">{euro(till?.revenues)} €</dd>
+                                </div>
+                                <div className="flex justify-between">
+                                    <dt className="text-ts-muted">Ενοικιάσεις ημέρας</dt>
+                                    <dd className="text-ts-fg">{euro(till?.rentals)} €</dd>
+                                </div>
+                            </dl>
+                        </section>
+                    </div>
+                </>
+            ) : null}
         </AdminLayout>
     );
 }

@@ -26,9 +26,12 @@ class HandleInertiaRequests extends Middleware
         $club = $request->attributes->get('currentClub') ?? $user?->activeClub;
         $platformConfigService = app(PlatformConfigService::class);
         $platformConfig = $user ? $platformConfigService->get() : [];
-        $enabledModules = $club
+        $clubModules = $club
             ? $platformConfigService->modulesForClub($club->id)
             : array_column(Navigation::academyModules(), 'id');
+        $enabledModules = $user
+            ? $user->allowedModulesInClub($clubModules, $club)
+            : $clubModules;
 
         return [
             ...parent::share($request),
@@ -47,6 +50,9 @@ class HandleInertiaRequests extends Middleware
                             ? Roles::PLATFORM_ADMIN
                             : $user->roleInClub($club)
                     ),
+                    'permissions' => $user->is_platform_admin
+                        ? $clubModules
+                        : $user->permissionsInClub($club),
                 ] : null,
                 'impersonating' => (bool) $request->session()->get('impersonator_id'),
             ],
@@ -69,14 +75,19 @@ class HandleInertiaRequests extends Middleware
                 'modules' => $enabledModules,
             ],
             'clubAlerts' => $club ? [
-                'pendingRegistrations' => RegistrationApplication::query()->withoutGlobalScopes()
-                    ->where('club_id', $club->id)
-                    ->whereIn('status', ['pending', 'new', 'waiting'])
-                    ->count(),
-                'lowStock' => WarehouseProduct::query()->withoutGlobalScopes()
-                    ->where('club_id', $club->id)
-                    ->whereColumn('stock_qty', '<=', 'low_stock_threshold')
-                    ->count(),
+                'pendingRegistrations' => in_array('athletes', $enabledModules, true)
+                    || in_array('settings', $enabledModules, true)
+                    ? RegistrationApplication::query()->withoutGlobalScopes()
+                        ->where('club_id', $club->id)
+                        ->whereIn('status', ['pending', 'new', 'waiting'])
+                        ->count()
+                    : 0,
+                'lowStock' => in_array('warehouse', $enabledModules, true)
+                    ? WarehouseProduct::query()->withoutGlobalScopes()
+                        ->where('club_id', $club->id)
+                        ->whereColumn('stock_qty', '<=', 'low_stock_threshold')
+                        ->count()
+                    : 0,
             ] : [
                 'pendingRegistrations' => 0,
                 'lowStock' => 0,

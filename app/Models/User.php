@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Services\Platform\PlatformConfigService;
+use App\Support\Navigation;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -57,5 +59,65 @@ class User extends Authenticatable
         $membership = $this->clubs()->where('clubs.id', $club->id)->first();
 
         return $membership?->pivot?->role;
+    }
+
+    /**
+     * Module ids granted to this user in the club (pivot permissions, else role defaults).
+     *
+     * @return list<string>
+     */
+    public function permissionsInClub(?Club $club = null): array
+    {
+        if ($this->is_platform_admin) {
+            return array_column(Navigation::academyModules(), 'id');
+        }
+
+        $club ??= $this->activeClub;
+        if (! $club) {
+            return [];
+        }
+
+        $membership = $this->clubs()->where('clubs.id', $club->id)->first();
+        if (! $membership) {
+            return [];
+        }
+
+        $raw = $membership->pivot->permissions ?? [];
+        if (is_string($raw)) {
+            $raw = json_decode($raw, true) ?: [];
+        }
+
+        if (is_array($raw) && $raw !== []) {
+            return array_values(array_unique(array_filter($raw, 'is_string')));
+        }
+
+        $role = (string) ($membership->pivot->role ?? '');
+        $defaults = app(PlatformConfigService::class)->get()['clubRolePermissions'][$role] ?? [];
+        if (! is_array($defaults)) {
+            $defaults = [];
+        }
+
+        return array_values(array_unique(array_filter($defaults, 'is_string')));
+    }
+
+    /**
+     * Modules visible in the club sidebar for this user.
+     *
+     * @param  list<string>  $clubModules
+     * @return list<string>
+     */
+    public function allowedModulesInClub(array $clubModules, ?Club $club = null): array
+    {
+        if ($this->is_platform_admin) {
+            return array_values($clubModules);
+        }
+
+        $allowed = array_values(array_intersect($clubModules, $this->permissionsInClub($club)));
+
+        if ($allowed !== [] && ! in_array('dashboard', $allowed, true)) {
+            array_unshift($allowed, 'dashboard');
+        }
+
+        return $allowed;
     }
 }
