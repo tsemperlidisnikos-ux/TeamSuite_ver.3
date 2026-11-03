@@ -13,7 +13,9 @@ use App\Models\RentalSetting;
 use App\Models\User;
 use App\Support\Roles;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -197,11 +199,10 @@ class MediumParityGapsTest extends TestCase
                         ],
                     ],
                 ],
-                'hero_image_url' => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
                 'facilities' => [
                     [
                         'id' => $facility->id,
-                        'photoUrl' => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+                        'photoUrl' => null,
                         'is_rentable' => true,
                         'sports' => ['Βόλεϊ', 'Μπάσκετ'],
                     ],
@@ -216,13 +217,9 @@ class MediumParityGapsTest extends TestCase
         $this->assertSame($facility->id, $settings->rules['rules'][0]['facilityId'] ?? null);
         $this->assertTrue((bool) ($settings->rules['rules'][0]['enabled'] ?? false));
         $this->assertEquals(40.0, (float) ($settings->rules['rules'][0]['hourlyRateFull'] ?? 0));
-        $this->assertNotNull($settings->rules['heroImageUrl'] ?? null);
-        $this->assertStringNotContainsString('data:image', (string) ($settings->rules['heroImageUrl'] ?? ''));
 
         $facility->refresh();
         $this->assertTrue((bool) $facility->is_rentable);
-        $this->assertNotNull($facility->meta['photoUrl'] ?? null);
-        $this->assertStringNotContainsString('/api/club-media', (string) ($facility->meta['photoUrl'] ?? ''));
 
         $clubSettings = ClubSetting::query()->where('club_id', $club->id)->first();
         $this->assertNotNull($clubSettings);
@@ -235,6 +232,45 @@ class MediumParityGapsTest extends TestCase
                 ->where('publicEnabled', true)
                 ->has('facilities', 1)
             );
+    }
+
+    public function test_rentals_media_upload_persists_facility_and_hero_photos(): void
+    {
+        Storage::fake('public');
+        ['club' => $club, 'user' => $user] = $this->seedClub();
+
+        $facility = Facility::query()->withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(),
+            'club_id' => $club->id,
+            'name' => 'Κλειστό Α',
+            'is_rentable' => true,
+            'meta' => [],
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('admin.rentals.upload-media'), [
+                'kind' => 'facility',
+                'facility_id' => $facility->id,
+                'photo' => UploadedFile::fake()->image('court.jpg', 640, 480),
+            ])
+            ->assertRedirect(route('admin.rentals.index', ['tab' => 'availability']));
+
+        $facility->refresh();
+        $path = $facility->meta['photoUrl'] ?? null;
+        $this->assertIsString($path);
+        $this->assertTrue(Storage::disk('public')->exists($path));
+
+        $this->actingAs($user)
+            ->post(route('admin.rentals.upload-media'), [
+                'kind' => 'hero',
+                'photo' => UploadedFile::fake()->image('hero.jpg', 1200, 600),
+            ])
+            ->assertRedirect(route('admin.rentals.index', ['tab' => 'link']));
+
+        $settings = RentalSetting::query()->withoutGlobalScopes()->where('club_id', $club->id)->first();
+        $hero = $settings?->rules['heroImageUrl'] ?? null;
+        $this->assertIsString($hero);
+        $this->assertTrue(Storage::disk('public')->exists($hero));
     }
 
     public function test_doctor_dashboard_view(): void

@@ -89,41 +89,12 @@ function normalizeRule(rule, facilityId) {
     };
 }
 
-function readImageFile(file, { maxEdge = 1280, quality = 0.82 } = {}) {
-    return new Promise((resolve, reject) => {
-        if (!file) {
-            resolve(null);
-            return;
-        }
-
-        const objectUrl = URL.createObjectURL(file);
-        const image = new Image();
-        image.onload = () => {
-            try {
-                const scale = Math.min(1, maxEdge / Math.max(image.width || 1, image.height || 1));
-                const width = Math.max(1, Math.round((image.width || 1) * scale));
-                const height = Math.max(1, Math.round((image.height || 1) * scale));
-                const canvas = document.createElement('canvas');
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                if (!ctx) {
-                    reject(new Error('Αποτυχία επεξεργασίας εικόνας'));
-                    return;
-                }
-                ctx.drawImage(image, 0, 0, width, height);
-                resolve(canvas.toDataURL('image/jpeg', quality));
-            } catch (error) {
-                reject(error instanceof Error ? error : new Error('Αποτυχία επεξεργασίας εικόνας'));
-            } finally {
-                URL.revokeObjectURL(objectUrl);
-            }
-        };
-        image.onerror = () => {
-            URL.revokeObjectURL(objectUrl);
-            reject(new Error('Αποτυχία ανάγνωσης αρχείου'));
-        };
-        image.src = objectUrl;
+function uploadRentalMedia(payload, { onSuccess, onError } = {}) {
+    router.post(route('admin.rentals.upload-media'), payload, {
+        forceFormData: true,
+        preserveScroll: true,
+        onSuccess,
+        onError,
     });
 }
 
@@ -254,7 +225,7 @@ export default function Index({
     canDeleteBookings = false,
     occupancy = {},
 }) {
-    const { currentClub, flash } = usePage().props;
+    const { currentClub, flash, errors } = usePage().props;
     const initialTab =
         filters?.tab === 'bookings' || filters?.tab === 'link' || filters?.tab === 'availability'
             ? filters.tab
@@ -361,40 +332,58 @@ export default function Index({
         patchWindow(facilityId, { days });
     };
 
-    const setFacilityPhoto = (facilityId, photoUrl) => {
-        setDraftFacilities((prev) =>
-            prev.map((f) => (f.id === facilityId ? { ...f, photoUrl } : f)),
+    useEffect(() => {
+        setDraftFacilities(
+            (facilities || []).map((f) => ({
+                id: f.id,
+                name: f.name,
+                is_rentable: Boolean(f.is_rentable),
+                photoUrl: f.photoUrl || null,
+                sports: Array.isArray(f.sports) ? f.sports : [],
+            })),
+        );
+        setHeroUrl(heroImageUrl || null);
+        setPublicEnabled(Boolean(publicRentEnabled));
+        setNotes(rentalNotes || '');
+    }, [facilities, heroImageUrl, publicRentEnabled, rentalNotes]);
+
+    const handleFacilityPhoto = (facilityId, event) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) {
+            return;
+        }
+        setMessage('Αποθήκευση φωτογραφίας…');
+        uploadRentalMedia(
+            {
+                kind: 'facility',
+                facility_id: facilityId,
+                photo: file,
+            },
+            {
+                onSuccess: () => setMessage(''),
+                onError: () => setMessage('Αποτυχία αποθήκευσης φωτογραφίας γηπέδου.'),
+            },
         );
     };
 
-    const handleFacilityPhoto = async (facilityId, event) => {
+    const handleHeroFile = (event) => {
         const file = event.target.files?.[0];
         event.target.value = '';
         if (!file) {
             return;
         }
-        try {
-            const dataUrl = await readImageFile(file);
-            setFacilityPhoto(facilityId, dataUrl);
-            setMessage('Η φωτογραφία ενημερώθηκε — πατήστε Αποθήκευση διαθεσιμότητας.');
-        } catch {
-            setMessage('Αποτυχία φόρτωσης φωτογραφίας.');
-        }
-    };
-
-    const handleHeroFile = async (event) => {
-        const file = event.target.files?.[0];
-        event.target.value = '';
-        if (!file) {
-            return;
-        }
-        try {
-            const dataUrl = await readImageFile(file);
-            setHeroUrl(dataUrl);
-            setMessage('Η φωτογραφία δημόσιου link ενημερώθηκε — πατήστε Αποθήκευση διαθεσιμότητας.');
-        } catch {
-            setMessage('Αποτυχία φόρτωσης φωτογραφίας.');
-        }
+        setMessage('Αποθήκευση φωτογραφίας…');
+        uploadRentalMedia(
+            {
+                kind: 'hero',
+                photo: file,
+            },
+            {
+                onSuccess: () => setMessage(''),
+                onError: () => setMessage('Αποτυχία αποθήκευσης φωτογραφίας δημόσιου link.'),
+            },
+        );
     };
 
     const saveAvailability = () => {
@@ -419,6 +408,8 @@ export default function Index({
                 preserveScroll: true,
                 onFinish: () => setSaving(false),
                 onSuccess: () => setMessage(''),
+                onError: () =>
+                    setMessage('Αποτυχία αποθήκευσης. Έλεγξε τα πεδία και δοκίμασε ξανά.'),
             },
         );
     };
@@ -569,6 +560,11 @@ export default function Index({
                     {message}
                 </div>
             ) : null}
+            {errors && Object.keys(errors).length > 0 ? (
+                <div className="mb-4 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                    {Object.values(errors).flat().join(' ')}
+                </div>
+            ) : null}
 
             <div className="mb-4">
                 <h2 className="text-xl font-semibold text-ts-fg">{title}</h2>
@@ -642,9 +638,13 @@ export default function Index({
                                     type="button"
                                     className={btnSecondary}
                                     onClick={() => {
-                                        setHeroUrl(null);
-                                        setMessage(
-                                            'Η φωτογραφία αφαιρέθηκε — πατήστε Αποθήκευση διαθεσιμότητας.',
+                                        uploadRentalMedia(
+                                            { kind: 'hero', remove: true },
+                                            {
+                                                onSuccess: () => setMessage(''),
+                                                onError: () =>
+                                                    setMessage('Αποτυχία αφαίρεσης φωτογραφίας.'),
+                                            },
                                         );
                                     }}
                                 >
@@ -741,9 +741,19 @@ export default function Index({
                                                         type="button"
                                                         className={btnSecondary}
                                                         onClick={() => {
-                                                            setFacilityPhoto(facility.id, null);
-                                                            setMessage(
-                                                                'Η φωτογραφία αφαιρέθηκε — πατήστε Αποθήκευση διαθεσιμότητας.',
+                                                            uploadRentalMedia(
+                                                                {
+                                                                    kind: 'facility',
+                                                                    facility_id: facility.id,
+                                                                    remove: true,
+                                                                },
+                                                                {
+                                                                    onSuccess: () => setMessage(''),
+                                                                    onError: () =>
+                                                                        setMessage(
+                                                                            'Αποτυχία αφαίρεσης φωτογραφίας.',
+                                                                        ),
+                                                                },
                                                             );
                                                         }}
                                                     >

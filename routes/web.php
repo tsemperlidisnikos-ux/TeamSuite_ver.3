@@ -149,6 +149,8 @@ Route::middleware(['auth', 'verified', 'club'])->group(function () {
         ->name('admin.staff.bulk');
     Route::post('/admin/rentals/availability', [RentalController::class, 'saveAvailability'])
         ->name('admin.rentals.save-availability');
+    Route::post('/admin/rentals/media', [RentalController::class, 'uploadMedia'])
+        ->name('admin.rentals.upload-media');
     Route::post('/admin/rentals/book', [RentalController::class, 'book'])
         ->name('admin.rentals.book');
     Route::post('/admin/rentals/{id}/collect', [RentalController::class, 'collect'])

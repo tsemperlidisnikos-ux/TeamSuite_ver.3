@@ -16,6 +16,7 @@ use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -467,6 +468,116 @@ class RentalController extends ClubResourceController
             ->delete();
     }
 
+    public function uploadMedia(Request $request): RedirectResponse
+    {
+        $clubId = $this->clubId($request);
+
+        $data = $request->validate([
+            'kind' => ['required', 'in:facility,hero'],
+            'facility_id' => ['required_if:kind,facility', 'nullable', 'uuid'],
+            'photo' => ['required_without:remove', 'nullable', 'file', 'image', 'max:10240'],
+            'remove' => ['sometimes', 'boolean'],
+        ]);
+
+        if ($request->boolean('remove')) {
+            return $this->removeUploadedMedia($clubId, (string) $data['kind'], $data['facility_id'] ?? null);
+        }
+
+        $file = $request->file('photo');
+        abort_unless($file !== null && $file->isValid(), 422);
+
+        $directory = $data['kind'] === 'hero'
+            ? 'club-media/rent-hero/'.$clubId
+            : 'club-media/facilities/'.$clubId;
+        $path = $file->store($directory, 'public');
+
+        if ($data['kind'] === 'hero') {
+            $existing = RentalSetting::query()->where('club_id', $clubId)->first();
+            $payload = $this->normalizeRulesPayload($existing?->rules);
+            $this->deleteStoredPublicPath($payload['heroImageUrl'] ?? null);
+            $payload['heroImageUrl'] = $path;
+            RentalSetting::query()->updateOrCreate(
+                ['club_id' => $clubId],
+                [
+                    'public_enabled' => (bool) ($existing?->public_enabled ?? false),
+                    'rules' => $payload,
+                ],
+            );
+
+            return redirect()
+                ->route('admin.rentals.index', ['tab' => 'link'])
+                ->with('success', 'Η φωτογραφία δημόσιου link αποθηκεύτηκε.');
+        }
+
+        $facility = Facility::query()
+            ->where('club_id', $clubId)
+            ->where('id', $data['facility_id'])
+            ->firstOrFail();
+        $meta = is_array($facility->meta) ? $facility->meta : [];
+        $this->deleteStoredPublicPath($meta['photoUrl'] ?? $meta['photo_url'] ?? null);
+        $meta['photoUrl'] = $path;
+        unset($meta['photo_url']);
+        $facility->meta = $meta;
+        $facility->save();
+
+        return redirect()
+            ->route('admin.rentals.index', ['tab' => 'availability'])
+            ->with('success', 'Η φωτογραφία γηπέδου αποθηκεύτηκε.');
+    }
+
+    private function removeUploadedMedia(string $clubId, string $kind, ?string $facilityId): RedirectResponse
+    {
+        if ($kind === 'hero') {
+            $existing = RentalSetting::query()->where('club_id', $clubId)->first();
+            $payload = $this->normalizeRulesPayload($existing?->rules);
+            $this->deleteStoredPublicPath($payload['heroImageUrl'] ?? null);
+            $payload['heroImageUrl'] = null;
+            RentalSetting::query()->updateOrCreate(
+                ['club_id' => $clubId],
+                [
+                    'public_enabled' => (bool) ($existing?->public_enabled ?? false),
+                    'rules' => $payload,
+                ],
+            );
+
+            return redirect()
+                ->route('admin.rentals.index', ['tab' => 'link'])
+                ->with('success', 'Η φωτογραφία δημόσιου link αφαιρέθηκε.');
+        }
+
+        $facility = Facility::query()
+            ->where('club_id', $clubId)
+            ->where('id', $facilityId)
+            ->firstOrFail();
+        $meta = is_array($facility->meta) ? $facility->meta : [];
+        $this->deleteStoredPublicPath($meta['photoUrl'] ?? $meta['photo_url'] ?? null);
+        $meta['photoUrl'] = null;
+        unset($meta['photo_url']);
+        $facility->meta = $meta;
+        $facility->save();
+
+        return redirect()
+            ->route('admin.rentals.index', ['tab' => 'availability'])
+            ->with('success', 'Η φωτογραφία γηπέδου αφαιρέθηκε.');
+    }
+
+    private function deleteStoredPublicPath(mixed $path): void
+    {
+        if (! is_string($path) || $path === '') {
+            return;
+        }
+
+        if (str_starts_with($path, 'data:')
+            || ClubPublicMedia::isLegacyClubMediaPath($path)
+            || str_starts_with($path, 'http://')
+            || str_starts_with($path, 'https://')
+            || str_starts_with($path, '/')) {
+            return;
+        }
+
+        Storage::disk('public')->delete($path);
+    }
+
     public function saveAvailability(Request $request): RedirectResponse
     {
         $clubId = $this->clubId($request);
@@ -474,7 +585,7 @@ class RentalController extends ClubResourceController
         $data = $request->validate([
             'public_enabled' => ['sometimes', 'boolean'],
             'notes' => ['nullable', 'string', 'max:2000'],
-            'hero_image_url' => ['nullable', 'string', 'max:500000'],
+            'hero_image_url' => ['nullable', 'string', 'max:2000'],
             'rules' => ['required', 'array'],
             'rules.*.facilityId' => ['required', 'uuid'],
             'rules.*.enabled' => ['sometimes', 'boolean'],
@@ -491,7 +602,7 @@ class RentalController extends ClubResourceController
             'rules.*.windows.*.endTime' => ['nullable', 'string', 'max:8'],
             'facilities' => ['nullable', 'array'],
             'facilities.*.id' => ['required', 'uuid'],
-            'facilities.*.photoUrl' => ['nullable', 'string', 'max:500000'],
+            'facilities.*.photoUrl' => ['nullable', 'string', 'max:2000'],
             'facilities.*.is_rentable' => ['sometimes', 'boolean'],
             'facilities.*.sports' => ['nullable', 'array'],
             'facilities.*.sports.*' => ['string', 'max:80'],
