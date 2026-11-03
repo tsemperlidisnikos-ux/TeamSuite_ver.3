@@ -249,7 +249,7 @@ export default function Rent({
     return (
         <div className="min-h-screen bg-slate-100 px-4 py-8 text-slate-900">
             <Head title={`Ενοικίαση — ${club.name}`} />
-            <div className="mx-auto w-full max-w-xl space-y-4">
+            <div className="mx-auto w-full max-w-3xl space-y-4">
                 <header className="overflow-hidden rounded-2xl bg-slate-500 text-white shadow-md">
                     {hero ? (
                         <img
@@ -286,15 +286,15 @@ export default function Rent({
                     <form className="space-y-5" onSubmit={(e) => submitBooking(e, false)}>
                         <div>
                             <p className="mb-2 text-sm font-medium text-slate-700">Επιλογή τοποθεσίας</p>
-                            <div className="grid gap-2 sm:grid-cols-2">
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                                 {facilities.map((f) => (
                                     <button
                                         key={f.id}
                                         type="button"
                                         className={
                                             facilityId === f.id
-                                                ? 'flex items-center gap-3 rounded-xl border-2 border-sky-600 bg-sky-50 p-3 text-left'
-                                                : 'flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-sky-300'
+                                                ? 'flex min-w-0 items-center gap-3 rounded-xl border-2 border-sky-600 bg-sky-50 p-3 text-left'
+                                                : 'flex min-w-0 items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-sky-300'
                                         }
                                         onClick={() => selectFacility(f.id)}
                                     >
@@ -302,14 +302,16 @@ export default function Rent({
                                             <img
                                                 src={f.photoUrl}
                                                 alt=""
-                                                className="h-12 w-12 rounded-lg object-cover"
+                                                className="h-12 w-12 shrink-0 rounded-lg object-cover"
                                             />
                                         ) : (
-                                            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-200 text-lg font-semibold text-slate-600">
+                                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-lg font-semibold text-slate-600">
                                                 {f.name.slice(0, 1)}
                                             </div>
                                         )}
-                                        <span className="text-sm font-medium text-slate-900">{f.name}</span>
+                                        <span className="min-w-0 text-sm font-medium leading-snug text-slate-900">
+                                            {f.name}
+                                        </span>
                                     </button>
                                 ))}
                             </div>
