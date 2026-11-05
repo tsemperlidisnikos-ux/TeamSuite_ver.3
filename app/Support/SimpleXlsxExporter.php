@@ -109,34 +109,55 @@ XML);
             return $idx;
         };
 
+        $colCount = max(count($headers), 1);
+        foreach ($rows as $row) {
+            $colCount = max($colCount, count($row));
+        }
+
         $sheetRowsXml = '';
         $allRows = array_merge([$headers], $rows);
+        $totalCells = 0;
         foreach ($allRows as $r => $row) {
             $rowNum = $r + 1;
             $cells = '';
-            foreach (array_values($row) as $c => $value) {
+            $padded = array_values($row);
+            while (count($padded) < $colCount) {
+                $padded[] = '';
+            }
+            foreach ($padded as $c => $value) {
                 $col = self::columnName($c + 1);
                 $ref = $col.$rowNum;
                 $text = self::cellText($value);
+                // Keep password-like numeric values as text in Excel.
+                if ($text !== '' && preg_match('/^\d+$/', $text) === 1) {
+                    $text = "\u{200B}".$text;
+                }
                 $idx = $addString($text);
                 $cells .= '<c r="'.$ref.'" t="s"><v>'.$idx.'</v></c>';
+                $totalCells++;
             }
             $sheetRowsXml .= '<row r="'.$rowNum.'">'.$cells.'</row>';
         }
 
         $uniqueCount = count($strings);
         $shared = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-            .'<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="'.$uniqueCount.'" uniqueCount="'.$uniqueCount.'">';
+            .'<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="'.$totalCells.'" uniqueCount="'.$uniqueCount.'">';
         foreach ($strings as $s) {
-            $shared .= '<si><t>'.self::xml($s).'</t></si>';
+            $attrs = ($s === '' || preg_match('/^\s|\s$/', $s) === 1) ? ' xml:space="preserve"' : '';
+            $shared .= '<si><t'.$attrs.'>'.self::xml($s).'</t></si>';
         }
         $shared .= '</sst>';
         $zip->addFromString('xl/sharedStrings.xml', $shared);
+
+        $lastCol = self::columnName($colCount);
+        $lastRow = max(count($allRows), 1);
+        $dimension = 'A1:'.$lastCol.$lastRow;
 
         $zip->addFromString(
             'xl/worksheets/sheet1.xml',
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             .'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            .'<dimension ref="'.$dimension.'"/>'
             .'<sheetData>'.$sheetRowsXml.'</sheetData>'
             .'</worksheet>'
         );

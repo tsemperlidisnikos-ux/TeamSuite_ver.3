@@ -346,13 +346,18 @@ class PlatformUserController extends Controller
         $rows = $this->clubCredentialRows($club, $config->roleLabels());
 
         $exportRows = array_map(
-            static fn (array $row): array => [
-                $row['last_name'],
-                $row['first_name'],
-                $row['email'],
-                $row['username'],
-                $row['password'],
-            ],
+            static function (array $row): array {
+                $password = trim((string) ($row['password'] ?? ''));
+
+                return [
+                    (string) ($row['last_name'] ?? ''),
+                    (string) ($row['first_name'] ?? ''),
+                    (string) ($row['email'] ?? ''),
+                    (string) ($row['username'] ?? ''),
+                    // Always emit a visible cell so Excel keeps the PASSWORD column.
+                    $password !== '' ? $password : '—',
+                ];
+            },
             $rows,
         );
 

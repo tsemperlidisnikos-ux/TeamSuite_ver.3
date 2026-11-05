@@ -92,7 +92,22 @@ class PlatformClubUserDirectoryTest extends TestCase
             'attachment;',
             (string) $export->headers->get('content-disposition')
         );
-        $this->assertGreaterThan(100, strlen($export->getContent()));
+        $binary = $export->getContent();
+        $this->assertGreaterThan(100, strlen($binary));
+
+        $tmp = tempnam(sys_get_temp_dir(), 'xlsx');
+        $this->assertNotFalse($tmp);
+        file_put_contents($tmp, $binary);
+        $zip = new \ZipArchive;
+        $this->assertTrue($zip->open($tmp) === true);
+        $shared = (string) $zip->getFromName('xl/sharedStrings.xml');
+        $sheet = (string) $zip->getFromName('xl/worksheets/sheet1.xml');
+        $zip->close();
+        @unlink($tmp);
+
+        $this->assertStringContainsString('PASSWORD', $shared);
+        $this->assertStringContainsString('secret-pass', $shared);
+        $this->assertStringContainsString('dimension ref="A1:E', $sheet);
     }
 
     public function test_non_platform_admin_cannot_view_club_directory(): void
