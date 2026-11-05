@@ -1,10 +1,13 @@
 import PlatformLayout from '@/Layouts/PlatformLayout';
+import { downloadClubUsersCsv, downloadClubUsersXlsx } from '@/utils/downloadClubUsersXlsx';
 import { Head, router } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
 
 const field =
     'w-full rounded-md border border-ts-border bg-ts-surface px-2 py-1.5 text-sm text-ts-fg';
 const btn = 'rounded-md bg-ts-accent px-3 py-1.5 text-sm text-ts-accent-fg hover:bg-ts-accent-hover disabled:opacity-50';
+const btnSecondary =
+    'rounded-md border border-ts-border bg-ts-surface px-3 py-1.5 text-sm text-ts-fg hover:bg-ts-surface-2 disabled:opacity-50';
 
 export default function ClubUserDirectory({ clubs = [], clubId, clubName, rows = [], passwordNote }) {
     const [query, setQuery] = useState('');
@@ -20,7 +23,8 @@ export default function ClubUserDirectory({ clubs = [], clubId, clubName, rows =
                 (row.first_name || '').toLowerCase().includes(q) ||
                 (row.email || '').toLowerCase().includes(q) ||
                 (row.username || '').toLowerCase().includes(q) ||
-                (row.role_label || '').toLowerCase().includes(q),
+                (row.role_label || '').toLowerCase().includes(q) ||
+                (row.password || '').toLowerCase().includes(q),
         );
     }, [rows, query]);
 
@@ -32,11 +36,26 @@ export default function ClubUserDirectory({ clubs = [], clubId, clubName, rows =
         );
     };
 
+    const fileBase = () => {
+        const safe = String(clubName || clubId || 'club')
+            .replace(/[^\w.\-Α-Ωα-ωΆ-Ώά-ώ ]+/gu, '_')
+            .trim();
+        return `club-users-${safe || 'club'}`;
+    };
+
     const exportXlsx = () => {
-        if (!clubId) {
+        if (!clubId || rows.length === 0) {
             return;
         }
-        window.location.href = route('platform.club-users.export', { club_id: clubId });
+        // Export exactly the rows shown to Platform Admin (includes PASSWORD).
+        downloadClubUsersXlsx(filtered.length ? filtered : rows, `${fileBase()}.xlsx`);
+    };
+
+    const exportCsv = () => {
+        if (!clubId || rows.length === 0) {
+            return;
+        }
+        downloadClubUsersCsv(filtered.length ? filtered : rows, `${fileBase()}.csv`);
     };
 
     return (
@@ -44,8 +63,8 @@ export default function ClubUserDirectory({ clubs = [], clubId, clubName, rows =
             <Head title="Χρήστες συλλόγου" />
 
             <p className="mb-4 text-sm text-ts-muted">
-                Κατάλογος χρηστών ανά σύλλογο (μόνο Platform Admin). Εξαγωγή σε XLSX με στήλες ΕΠΩΝΥΜΟ,
-                ΟΝΟΜΑ, EMAIL, USERNAME, PASSWORD.
+                Κατάλογος χρηστών ανά σύλλογο (μόνο Platform Admin). Εξαγωγή με στήλες ΕΠΩΝΥΜΟ, ΟΝΟΜΑ,
+                EMAIL, USERNAME, PASSWORD.
             </p>
 
             <div className="mb-4 flex flex-wrap items-end gap-3">
@@ -75,6 +94,14 @@ export default function ClubUserDirectory({ clubs = [], clubId, clubName, rows =
                 </label>
                 <button type="button" className={btn} disabled={!clubId || rows.length === 0} onClick={exportXlsx}>
                     Εξαγωγή XLSX
+                </button>
+                <button
+                    type="button"
+                    className={btnSecondary}
+                    disabled={!clubId || rows.length === 0}
+                    onClick={exportCsv}
+                >
+                    Εξαγωγή CSV
                 </button>
             </div>
 

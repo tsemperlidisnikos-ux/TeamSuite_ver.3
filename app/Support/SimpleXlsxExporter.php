@@ -6,7 +6,7 @@ use RuntimeException;
 use Symfony\Component\HttpFoundation\Response;
 use ZipArchive;
 
-/** Minimal XLSX writer (no PhpSpreadsheet) for small Platform Admin exports. */
+/** Minimal XLSX writer using inline strings (Excel-compatible, no sharedStrings). */
 class SimpleXlsxExporter
 {
     /**
@@ -24,7 +24,7 @@ class SimpleXlsxExporter
         return response($binary, 200, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'Content-Disposition' => 'attachment; filename="'.$safeName.'"',
-            'Cache-Control' => 'max-age=0',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate',
         ]);
     }
 
@@ -47,6 +47,10 @@ class SimpleXlsxExporter
         }
 
         $sheetName = self::xml(mb_substr($sheetTitle !== '' ? $sheetTitle : 'Sheet1', 0, 31));
+        $colCount = max(count($headers), 1);
+        foreach ($rows as $row) {
+            $colCount = max($colCount, count($row));
+        }
 
         $zip->addFromString('[Content_Types].xml', <<<'XML'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -55,7 +59,6 @@ class SimpleXlsxExporter
   <Default Extension="xml" ContentType="application/xml"/>
   <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
   <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
-  <Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
   <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
 </Types>
 XML);
@@ -71,8 +74,7 @@ XML);
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
-  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>
-  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
 </Relationships>
 XML);
 
@@ -88,76 +90,52 @@ XML);
         $zip->addFromString('xl/styles.xml', <<<'XML'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
+  <fonts count="2">
+    <font><sz val="12"/><name val="Calibri"/></font>
+    <font><b/><sz val="12"/><name val="Calibri"/></font>
+  </fonts>
   <fills count="1"><fill><patternFill patternType="none"/></fill></fills>
   <borders count="1"><border/></borders>
   <cellStyleXfs count="1"><xf/></cellStyleXfs>
-  <cellXfs count="1"><xf/></cellXfs>
+  <cellXfs count="2">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+  </cellXfs>
 </styleSheet>
 XML);
 
-        $strings = [];
-        $stringIndex = [];
-        $addString = static function (string $value) use (&$strings, &$stringIndex): int {
-            if (array_key_exists($value, $stringIndex)) {
-                return $stringIndex[$value];
-            }
-            $idx = count($strings);
-            $strings[] = $value;
-            $stringIndex[$value] = $idx;
-
-            return $idx;
-        };
-
-        $colCount = max(count($headers), 1);
-        foreach ($rows as $row) {
-            $colCount = max($colCount, count($row));
+        $colsXml = '';
+        for ($i = 1; $i <= $colCount; $i++) {
+            $colsXml .= '<col min="'.$i.'" max="'.$i.'" width="18" customWidth="1"/>';
         }
 
         $sheetRowsXml = '';
         $allRows = array_merge([$headers], $rows);
-        $totalCells = 0;
         foreach ($allRows as $r => $row) {
             $rowNum = $r + 1;
+            $style = $r === 0 ? 1 : 0;
             $cells = '';
             $padded = array_values($row);
             while (count($padded) < $colCount) {
                 $padded[] = '';
             }
             foreach ($padded as $c => $value) {
-                $col = self::columnName($c + 1);
-                $ref = $col.$rowNum;
+                $ref = self::columnName($c + 1).$rowNum;
                 $text = self::cellText($value);
-                // Keep password-like numeric values as text in Excel.
-                if ($text !== '' && preg_match('/^\d+$/', $text) === 1) {
-                    $text = "\u{200B}".$text;
-                }
-                $idx = $addString($text);
-                $cells .= '<c r="'.$ref.'" t="s"><v>'.$idx.'</v></c>';
-                $totalCells++;
+                $cells .= '<c r="'.$ref.'" s="'.$style.'" t="inlineStr"><is><t xml:space="preserve">'.self::xml($text).'</t></is></c>';
             }
             $sheetRowsXml .= '<row r="'.$rowNum.'">'.$cells.'</row>';
         }
 
-        $uniqueCount = count($strings);
-        $shared = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-            .'<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="'.$totalCells.'" uniqueCount="'.$uniqueCount.'">';
-        foreach ($strings as $s) {
-            $attrs = ($s === '' || preg_match('/^\s|\s$/', $s) === 1) ? ' xml:space="preserve"' : '';
-            $shared .= '<si><t'.$attrs.'>'.self::xml($s).'</t></si>';
-        }
-        $shared .= '</sst>';
-        $zip->addFromString('xl/sharedStrings.xml', $shared);
-
         $lastCol = self::columnName($colCount);
         $lastRow = max(count($allRows), 1);
-        $dimension = 'A1:'.$lastCol.$lastRow;
 
         $zip->addFromString(
             'xl/worksheets/sheet1.xml',
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             .'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-            .'<dimension ref="'.$dimension.'"/>'
+            .'<dimension ref="A1:'.$lastCol.$lastRow.'"/>'
+            .'<cols>'.$colsXml.'</cols>'
             .'<sheetData>'.$sheetRowsXml.'</sheetData>'
             .'</worksheet>'
         );
