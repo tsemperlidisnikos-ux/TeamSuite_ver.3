@@ -131,6 +131,10 @@ final class AdminClubResources
                 'route' => 'admin.coaches',
                 'search' => ['first_name', 'last_name', 'email', 'phone', 'sport', 'gga_code'],
                 'status_field' => 'is_active',
+                'order_by' => [
+                    ['last_name', 'asc'],
+                    ['first_name', 'asc'],
+                ],
                 'filter_options' => ['status' => $activeInactive],
                 'filter_label' => 'Κατάσταση',
                 'empty_message' => 'Πάτα «Νέος προπονητής» για να προσθέσεις τον πρώτο.',
@@ -177,6 +181,10 @@ final class AdminClubResources
                 'route' => 'admin.staff',
                 'search' => ['first_name', 'last_name', 'email', 'phone', 'role_title'],
                 'status_field' => 'is_active',
+                'order_by' => [
+                    ['last_name', 'asc'],
+                    ['first_name', 'asc'],
+                ],
                 'filter_options' => ['status' => $activeInactive],
                 'filter_label' => 'Κατάσταση',
                 'empty_message' => 'Δεν βρέθηκαν μέλη προσωπικού.',
@@ -227,6 +235,10 @@ final class AdminClubResources
                 'route' => 'admin.members',
                 'search' => ['first_name', 'last_name', 'email', 'phone', 'member_number'],
                 'status_field' => 'status',
+                'order_by' => [
+                    ['last_name', 'asc'],
+                    ['first_name', 'asc'],
+                ],
                 'empty_message' => 'Δεν υπάρχουν μέλη. Προσθέστε το πρώτο μέλος του συλλόγου.',
                 'columns' => [
                     ['key' => 'last_name', 'label' => 'Επώνυμο'],

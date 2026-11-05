@@ -43,6 +43,7 @@ abstract class ClubResourceController extends Controller
             $status,
             $config['search'] ?? [],
             $config['status_field'] ?? null,
+            $config['order_by'] ?? null,
         );
 
         $paginator->setCollection(

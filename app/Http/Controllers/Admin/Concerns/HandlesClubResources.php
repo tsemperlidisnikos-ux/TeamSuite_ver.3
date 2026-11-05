@@ -18,12 +18,9 @@ trait HandlesClubResources
      */
     /**
      * @param  list<string>  $columnKeys
-     * @param  list<string>  $fieldKeys  Extra keys needed for inline edit forms
-     */
-    /**
-     * @param  list<string>  $columnKeys
      * @param  list<string>  $fieldKeys
      * @param  list<string>  $searchFields
+     * @param  list<array{0: string, 1?: string}>|null  $orderBy
      */
     protected function clubResourceIndex(
         Request $request,
@@ -35,6 +32,7 @@ trait HandlesClubResources
         string $status = '',
         array $searchFields = [],
         ?string $statusField = null,
+        ?array $orderBy = null,
     ): LengthAwarePaginator {
         $keys = array_values(array_unique(array_merge($columnKeys, $fieldKeys)));
         $builder = $this->clubQuery($modelClass, $request);
@@ -59,8 +57,19 @@ trait HandlesClubResources
             }
         }
 
+        if (is_array($orderBy) && $orderBy !== []) {
+            foreach ($orderBy as $clause) {
+                if (! is_array($clause) || ! isset($clause[0]) || ! is_string($clause[0]) || $clause[0] === '') {
+                    continue;
+                }
+                $direction = strtolower((string) ($clause[1] ?? 'asc')) === 'desc' ? 'desc' : 'asc';
+                $builder->orderBy($clause[0], $direction);
+            }
+        } else {
+            $builder->latest('updated_at');
+        }
+
         return $builder
-            ->latest('updated_at')
             ->paginate($perPage)
             ->withQueryString()
             ->through(function (Model $item) use ($keys) {
