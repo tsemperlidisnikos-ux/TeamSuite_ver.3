@@ -8,8 +8,14 @@ function platformHref(name, fallback) {
     }
 }
 
-export default function PlatformLayout({ title = 'Διαχείριση', children, activeNav = 'manage' }) {
+export default function PlatformLayout({
+    title = 'Διαχείριση',
+    children,
+    activeNav = 'manage',
+    wide = false,
+}) {
     const { auth, flash } = usePage().props;
+    const shell = wide ? 'mx-auto w-full max-w-[1600px] px-3 py-4 lg:px-6' : 'mx-auto max-w-7xl px-4 py-6 lg:px-8';
     const nav = [
         { id: 'manage', label: 'Διαχείριση', href: platformHref('platform.dashboard', '/platform') },
         { id: 'users', label: 'Χρήστες', href: platformHref('platform.users.index', '/platform/users') },
@@ -24,7 +30,7 @@ export default function PlatformLayout({ title = 'Διαχείριση', childre
     return (
         <div className="min-h-screen bg-ts-bg text-ts-fg">
             <header className="border-b border-ts-border/80 bg-ts-bg">
-                <div className="mx-auto flex max-w-7xl flex-wrap items-start justify-between gap-3 px-4 py-4 lg:px-8">
+                <div className={`flex flex-wrap items-start justify-between gap-3 ${shell}`}>
                     <div>
                         <div className="text-[11px] uppercase tracking-[0.16em] text-ts-accent">
                             Platform Admin
@@ -61,7 +67,7 @@ export default function PlatformLayout({ title = 'Διαχείριση', childre
                 </div>
             </header>
 
-            <main className="mx-auto max-w-7xl px-4 py-6 lg:px-8">
+            <main className={shell}>
                 {flash?.success && (
                     <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
                         {flash.success}
