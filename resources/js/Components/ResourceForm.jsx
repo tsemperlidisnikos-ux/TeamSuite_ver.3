@@ -36,15 +36,22 @@ function FieldInput({ field, value, onChange, error }) {
         );
     }
     if (field.type === 'select') {
+        const options = field.options || [];
+        const current = value ?? '';
+        const hasCurrent = current !== '' && options.some((o) => o.value === current);
+
         return (
             <select
                 className="mt-1 w-full rounded-md border border-ts-border bg-ts-surface px-2 py-1.5 text-ts-fg"
-                value={value ?? ''}
+                value={current}
                 required={!!field.required}
                 onChange={(e) => onChange(e.target.value)}
             >
                 <option value="">—</option>
-                {(field.options || []).map((o) => (
+                {!hasCurrent && current !== '' ? (
+                    <option value={current}>{current}</option>
+                ) : null}
+                {options.map((o) => (
                     <option key={o.value} value={o.value}>
                         {o.label}
                     </option>

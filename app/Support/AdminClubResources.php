@@ -191,7 +191,20 @@ final class AdminClubResources
                 'fields' => [
                     ['name' => 'first_name', 'label' => 'Όνομα', 'type' => 'text', 'required' => true],
                     ['name' => 'last_name', 'label' => 'Επώνυμο', 'type' => 'text', 'required' => true],
-                    ['name' => 'role_title', 'label' => 'Ρόλος', 'type' => 'text'],
+                    [
+                        'name' => 'role_title',
+                        'label' => 'Ρόλος',
+                        'type' => 'select',
+                        'options' => [
+                            ['value' => 'Διαχειριστής', 'label' => 'Διαχειριστής'],
+                            ['value' => 'Γραμματεία', 'label' => 'Γραμματεία'],
+                            ['value' => 'Υπάλληλος', 'label' => 'Υπάλληλος'],
+                            ['value' => 'Καθαρίστρια', 'label' => 'Καθαρίστρια'],
+                            ['value' => 'Μάγειρας / Μαγείρισσα', 'label' => 'Μάγειρας / Μαγείρισσα'],
+                            ['value' => 'Διάφορα', 'label' => 'Διάφορα'],
+                            ['value' => 'Προπονητής', 'label' => 'Προπονητής'],
+                        ],
+                    ],
                     ['name' => 'email', 'label' => 'Email', 'type' => 'email'],
                     ['name' => 'phone', 'label' => 'Τηλέφωνο', 'type' => 'text'],
                     ['name' => 'is_active', 'label' => 'Ενεργός', 'type' => 'checkbox'],
@@ -199,7 +212,7 @@ final class AdminClubResources
                 'rules' => [
                     'first_name' => 'required|string|max:120',
                     'last_name' => 'required|string|max:120',
-                    'role_title' => 'nullable|string|max:120',
+                    'role_title' => 'nullable|string|max:120|in:Διαχειριστής,Γραμματεία,Υπάλληλος,Καθαρίστρια,Μάγειρας / Μαγείρισσα,Διάφορα,Προπονητής',
                     'email' => 'nullable|email|max:190',
                     'phone' => 'nullable|string|max:40',
                     'is_active' => 'boolean',
