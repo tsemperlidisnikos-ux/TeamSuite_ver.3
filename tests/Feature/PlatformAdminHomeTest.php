@@ -7,6 +7,7 @@ use App\Models\Club;
 use App\Models\LicensePackage;
 use App\Models\PlatformSetting;
 use App\Models\User;
+use App\Services\Platform\PlatformConfigService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -48,6 +49,37 @@ class PlatformAdminHomeTest extends TestCase
                 ])
                 ->where('platformBranding.appearanceTheme', 'ocean-slate')
             );
+    }
+
+    public function test_platform_admin_can_remove_settings_from_coach_role_permissions(): void
+    {
+        $user = User::factory()->create([
+            'password' => Hash::make('password'),
+            'email_verified_at' => now(),
+            'is_platform_admin' => true,
+            'active_club_id' => null,
+        ]);
+
+        $defaults = app(PlatformConfigService::class)->defaultRolePermissions();
+        $coachWithoutSettings = array_values(array_filter(
+            $defaults['coach'],
+            fn (string $module): bool => $module !== 'settings',
+        ));
+
+        $this->assertContains('settings', $defaults['coach']);
+
+        $this->actingAs($user)
+            ->post(route('platform.settings.update'), [
+                'clubRolePermissions' => array_merge($defaults, [
+                    'coach' => $coachWithoutSettings,
+                ]),
+            ])
+            ->assertRedirect();
+
+        $config = app(PlatformConfigService::class)->get();
+        $this->assertSame($coachWithoutSettings, $config['clubRolePermissions']['coach']);
+        $this->assertNotContains('settings', $config['clubRolePermissions']['coach']);
+        $this->assertSame($defaults['admin'], $config['clubRolePermissions']['admin']);
     }
 
     public function test_platform_admin_can_save_finance_tabs_and_modules(): void
