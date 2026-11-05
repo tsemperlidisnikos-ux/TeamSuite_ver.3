@@ -8,6 +8,7 @@ use App\Models\AcademyClass;
 use App\Models\Athlete;
 use App\Models\ParentAthleteLink;
 use App\Models\User;
+use App\Support\PersonNameSplitter;
 use App\Support\Roles;
 use App\Support\UserPasswordVault;
 use Illuminate\Http\RedirectResponse;
@@ -68,11 +69,18 @@ class ParentLinkController extends Controller
                     $inviteStatus = 'not_invited';
                 }
 
+                $fullName = $parent?->name ?: '—';
+                $parts = $fullName === '—'
+                    ? ['last_name' => '—', 'first_name' => '']
+                    : PersonNameSplitter::splitGivenNameFirst($fullName);
+
                 return [
                     'id' => $first->id,
                     'parent_user_id' => $first->parent_user_id,
                     'has_account' => (bool) $first->parent_user_id,
-                    'full_name' => $parent?->name ?: '—',
+                    'full_name' => $fullName,
+                    'last_name' => $parts['last_name'],
+                    'first_name' => $parts['first_name'],
                     'email' => $parent?->email ?: '',
                     'status' => $inviteStatus,
                     'receives_push' => $hasPush,

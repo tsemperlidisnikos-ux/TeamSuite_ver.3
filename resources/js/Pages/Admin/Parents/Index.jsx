@@ -86,10 +86,11 @@ export default function Index({
     };
 
     const exportCsv = () => {
-        const header = ['Ονοματεπώνυμο', 'Αθλητές', 'Email', 'Κατάσταση'];
+        const header = ['Επώνυμο', 'Όνομα', 'Αθλητές', 'Email', 'Κατάσταση'];
         const lines = directory.map((r) =>
             [
-                r.full_name,
+                r.last_name || '',
+                r.first_name || '',
                 (r.athletes || []).map((a) => a.label).join('; '),
                 r.email,
                 STATUS_LABELS[r.status] || r.status,
@@ -327,7 +328,8 @@ export default function Index({
                                         aria-label="Επιλογή όλων"
                                     />
                                 </th>
-                                <th className="px-3 py-2.5 text-left">Ονοματεπώνυμο</th>
+                                <th className="px-3 py-2.5 text-left">Επώνυμο</th>
+                                <th className="px-3 py-2.5 text-left">Όνομα</th>
                                 <th className="px-3 py-2.5 text-left">Συνδεδεμένοι αθλητές</th>
                                 <th className="px-3 py-2.5 text-left">Email</th>
                                 <th className="px-3 py-2.5 text-left">Κατάσταση</th>
@@ -360,7 +362,10 @@ export default function Index({
                                             />
                                         </td>
                                         <td className="px-3 py-2.5 font-semibold text-ts-fg">
-                                            {row.full_name}
+                                            {row.last_name || '—'}
+                                        </td>
+                                        <td className="px-3 py-2.5 font-semibold text-ts-fg">
+                                            {row.first_name || '—'}
                                         </td>
                                         <td className="px-3 py-2.5 text-ts-muted">
                                             {(row.athletes || []).length ? (
@@ -420,7 +425,7 @@ export default function Index({
                             {!pageRows.length && (
                                 <tr>
                                     <td
-                                        colSpan={7}
+                                        colSpan={8}
                                         className="px-3 py-8 text-center text-ts-muted"
                                     >
                                         Δεν υπάρχουν γονείς με αυτά τα κριτήρια.
