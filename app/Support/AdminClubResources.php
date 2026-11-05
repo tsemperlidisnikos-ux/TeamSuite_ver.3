@@ -212,7 +212,7 @@ final class AdminClubResources
                 'rules' => [
                     'first_name' => 'required|string|max:120',
                     'last_name' => 'required|string|max:120',
-                    'role_title' => 'nullable|string|max:120|in:Διαχειριστής,Γραμματεία,Υπάλληλος,Καθαρίστρια,Μάγειρας / Μαγείρισσα,Διάφορα,Προπονητής',
+                    'role_title' => 'nullable|string|max:120',
                     'email' => 'nullable|email|max:190',
                     'phone' => 'nullable|string|max:40',
                     'is_active' => 'boolean',
