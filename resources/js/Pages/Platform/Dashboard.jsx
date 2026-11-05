@@ -253,10 +253,15 @@ export default function Dashboard({
     };
 
     const save = (patch = {}) => {
-        const payload = { ...form.data, ...patch };
-        form.setData(payload);
+        // Only send the fields being saved — posting the whole platformConfig
+        // can drop nested updates (and keeps transform stale across saves).
+        const payload =
+            Object.keys(patch).length > 0 ? { ...patch } : { ...form.data };
         form.transform(() => payload);
-        form.post(route('platform.settings.update'), { preserveScroll: true });
+        form.post(route('platform.settings.update'), {
+            preserveScroll: true,
+            onFinish: () => form.transform((data) => data),
+        });
     };
 
     const toggleList = (list, id) =>
@@ -785,7 +790,7 @@ export default function Dashboard({
                                 roleLabels={catalogs?.roleLabels || {}}
                                 permissions={form.data.clubRolePermissions || {}}
                                 onChange={(next) => form.setData('clubRolePermissions', next)}
-                                onSave={() => save()}
+                                onSave={(next) => save({ clubRolePermissions: next })}
                                 processing={form.processing}
                             />
                         )}
@@ -1229,7 +1234,12 @@ function RolesEditor({
                     </label>
                 ))}
             </div>
-            <button type="button" className={btnClass} onClick={onSave} disabled={processing}>
+            <button
+                type="button"
+                className={btnClass}
+                onClick={() => onSave(permissions)}
+                disabled={processing}
+            >
                 Αποθήκευση δικαιωμάτων
             </button>
         </Panel>
