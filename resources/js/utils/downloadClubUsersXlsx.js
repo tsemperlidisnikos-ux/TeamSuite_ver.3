@@ -132,10 +132,11 @@ function zipStore(files) {
  * @param {string} filename
  */
 export function downloadClubUsersXlsx(rows, filename = 'club-users.xlsx') {
-    const headers = ['ΕΠΩΝΥΜΟ', 'ΟΝΟΜΑ', 'EMAIL', 'USERNAME', 'PASSWORD'];
+    const headers = ['ΕΠΩΝΥΜΟ', 'ΟΝΟΜΑ', 'ΡΟΛΟΣ', 'EMAIL', 'USERNAME', 'PASSWORD'];
     const data = (rows || []).map((row) => [
         row.last_name || '',
         row.first_name || '',
+        row.role_label || row.role || '',
         row.email || '',
         row.username || row.email || '',
         row.password && String(row.password).trim() !== '' ? String(row.password) : '—',
@@ -165,7 +166,7 @@ export function downloadClubUsersXlsx(rows, filename = 'club-users.xlsx') {
 
     const sheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <dimension ref="A1:E${Math.max(data.length + 1, 1)}"/>
+  <dimension ref="A1:F${Math.max(data.length + 1, 1)}"/>
   <cols>${colWidths
       .map((width, i) => `<col min="${i + 1}" max="${i + 1}" width="${width}" customWidth="1"/>`)
       .join('')}</cols>
@@ -237,7 +238,7 @@ export function downloadClubUsersXlsx(rows, filename = 'club-users.xlsx') {
 
 /** CSV fallback (Excel Greece often opens with ;). */
 export function downloadClubUsersCsv(rows, filename = 'club-users.csv') {
-    const headers = ['ΕΠΩΝΥΜΟ', 'ΟΝΟΜΑ', 'EMAIL', 'USERNAME', 'PASSWORD'];
+    const headers = ['ΕΠΩΝΥΜΟ', 'ΟΝΟΜΑ', 'ΡΟΛΟΣ', 'EMAIL', 'USERNAME', 'PASSWORD'];
     const escape = (value) => {
         const text = String(value ?? '');
         if (/[;"\n]/.test(text)) {
@@ -251,6 +252,7 @@ export function downloadClubUsersCsv(rows, filename = 'club-users.csv') {
             [
                 row.last_name || '',
                 row.first_name || '',
+                row.role_label || row.role || '',
                 row.email || '',
                 row.username || row.email || '',
                 row.password && String(row.password).trim() !== '' ? String(row.password) : '—',

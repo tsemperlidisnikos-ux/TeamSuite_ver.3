@@ -19,24 +19,48 @@ function Cell({ children, className = '', title }) {
 
 export default function ClubUserDirectory({ clubs = [], clubId, clubName, rows = [], passwordNote }) {
     const [query, setQuery] = useState('');
+    const [roleFilter, setRoleFilter] = useState('');
+
+    const roleOptions = useMemo(() => {
+        const map = new Map();
+        for (const row of rows) {
+            const key = row.role || '';
+            const label = row.role_label || row.role || '—';
+            if (!key) {
+                continue;
+            }
+            if (!map.has(key)) {
+                map.set(key, label);
+            }
+        }
+        return Array.from(map.entries())
+            .map(([value, label]) => ({ value, label }))
+            .sort((a, b) => a.label.localeCompare(b.label, 'el'));
+    }, [rows]);
 
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase();
-        if (!q) {
-            return rows;
-        }
-        return rows.filter(
-            (row) =>
+        return rows.filter((row) => {
+            if (roleFilter && (row.role || '') !== roleFilter) {
+                return false;
+            }
+            if (!q) {
+                return true;
+            }
+            return (
                 (row.last_name || '').toLowerCase().includes(q) ||
                 (row.first_name || '').toLowerCase().includes(q) ||
                 (row.email || '').toLowerCase().includes(q) ||
                 (row.username || '').toLowerCase().includes(q) ||
                 (row.role_label || '').toLowerCase().includes(q) ||
-                (row.password || '').toLowerCase().includes(q),
-        );
-    }, [rows, query]);
+                (row.password || '').toLowerCase().includes(q)
+            );
+        });
+    }, [rows, query, roleFilter]);
 
     const selectClub = (nextId) => {
+        setRoleFilter('');
+        setQuery('');
         router.get(
             route('platform.club-users.index'),
             { club_id: nextId || undefined },
@@ -48,21 +72,24 @@ export default function ClubUserDirectory({ clubs = [], clubId, clubName, rows =
         const safe = String(clubName || clubId || 'club')
             .replace(/[^\w.\-Α-Ωα-ωΆ-Ώά-ώ ]+/gu, '_')
             .trim();
-        return `club-users-${safe || 'club'}`;
+        const rolePart = roleFilter
+            ? `-${roleOptions.find((r) => r.value === roleFilter)?.label || roleFilter}`
+            : '';
+        return `club-users-${safe || 'club'}${rolePart}`.replace(/\s+/g, '_');
     };
 
     const exportXlsx = () => {
-        if (!clubId || rows.length === 0) {
+        if (!clubId || filtered.length === 0) {
             return;
         }
-        downloadClubUsersXlsx(filtered.length ? filtered : rows, `${fileBase()}.xlsx`);
+        downloadClubUsersXlsx(filtered, `${fileBase()}.xlsx`);
     };
 
     const exportCsv = () => {
-        if (!clubId || rows.length === 0) {
+        if (!clubId || filtered.length === 0) {
             return;
         }
-        downloadClubUsersCsv(filtered.length ? filtered : rows, `${fileBase()}.csv`);
+        downloadClubUsersCsv(filtered, `${fileBase()}.csv`);
     };
 
     return (
@@ -70,12 +97,12 @@ export default function ClubUserDirectory({ clubs = [], clubId, clubName, rows =
             <Head title="Χρήστες συλλόγου" />
 
             <p className="mb-3 text-sm text-ts-muted">
-                Κατάλογος χρηστών ανά σύλλογο (μόνο Platform Admin). Στην εξαγωγή XLSX/CSV μπαίνουν
-                ΕΠΩΝΥΜΟ, ΟΝΟΜΑ, EMAIL, USERNAME, PASSWORD.
+                Κατάλογος χρηστών ανά σύλλογο (μόνο Platform Admin). Η εξαγωγή περιλαμβάνει ό,τι
+                φαίνεται μετά το φίλτρο ρόλου.
             </p>
 
             <div className="mb-3 flex flex-wrap items-end gap-2">
-                <label className="min-w-[14rem] flex-1 text-sm">
+                <label className="min-w-[12rem] flex-1 text-sm">
                     <span className="mb-1 block text-ts-muted">Σύλλογος</span>
                     <select
                         className={field}
@@ -90,6 +117,21 @@ export default function ClubUserDirectory({ clubs = [], clubId, clubName, rows =
                         ))}
                     </select>
                 </label>
+                <label className="min-w-[10rem] flex-1 text-sm">
+                    <span className="mb-1 block text-ts-muted">Ρόλος</span>
+                    <select
+                        className={field}
+                        value={roleFilter}
+                        onChange={(e) => setRoleFilter(e.target.value)}
+                    >
+                        <option value="">Όλοι οι ρόλοι</option>
+                        {roleOptions.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                            </option>
+                        ))}
+                    </select>
+                </label>
                 <label className="min-w-[12rem] flex-1 text-sm">
                     <span className="mb-1 block text-ts-muted">Αναζήτηση</span>
                     <input
@@ -99,13 +141,13 @@ export default function ClubUserDirectory({ clubs = [], clubId, clubName, rows =
                         placeholder="Επώνυμο, email…"
                     />
                 </label>
-                <button type="button" className={btn} disabled={!clubId || rows.length === 0} onClick={exportXlsx}>
+                <button type="button" className={btn} disabled={!clubId || filtered.length === 0} onClick={exportXlsx}>
                     Εξαγωγή XLSX
                 </button>
                 <button
                     type="button"
                     className={btnSecondary}
-                    disabled={!clubId || rows.length === 0}
+                    disabled={!clubId || filtered.length === 0}
                     onClick={exportCsv}
                 >
                     Εξαγωγή CSV
@@ -121,19 +163,19 @@ export default function ClubUserDirectory({ clubs = [], clubId, clubName, rows =
             <div className="rounded-lg border border-ts-border bg-ts-surface">
                 <table className="w-full table-fixed text-sm">
                     <colgroup>
+                        <col className="w-[15%]" />
+                        <col className="w-[13%]" />
                         <col className="w-[16%]" />
-                        <col className="w-[14%]" />
-                        <col className="w-[30%]" />
-                        <col className="w-[20%]" />
-                        <col className="w-[20%]" />
+                        <col className="w-[28%]" />
+                        <col className="w-[28%]" />
                     </colgroup>
                     <thead className="bg-ts-surface text-left text-[11px] uppercase tracking-wide text-ts-muted">
                         <tr>
                             <th className="px-2 py-2">Επώνυμο</th>
                             <th className="px-2 py-2">Όνομα</th>
+                            <th className="px-2 py-2">Ρόλος</th>
                             <th className="px-2 py-2">Email / Username</th>
                             <th className="px-2 py-2">Password</th>
-                            <th className="px-2 py-2">Ρόλος</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -141,7 +183,7 @@ export default function ClubUserDirectory({ clubs = [], clubId, clubName, rows =
                             <tr>
                                 <td className="px-2 py-6 text-ts-muted" colSpan={5}>
                                     {clubId
-                                        ? 'Δεν βρέθηκαν χρήστες για αυτόν τον σύλλογο.'
+                                        ? 'Δεν βρέθηκαν χρήστες για αυτά τα κριτήρια.'
                                         : 'Επιλέξτε σύλλογο.'}
                                 </td>
                             </tr>
@@ -160,12 +202,6 @@ export default function ClubUserDirectory({ clubs = [], clubId, clubName, rows =
                                         <Cell className="text-ts-fg" title={row.first_name}>
                                             {row.first_name || '—'}
                                         </Cell>
-                                        <Cell className="text-ts-fg" title={emailTitle}>
-                                            {login || '—'}
-                                        </Cell>
-                                        <Cell className="font-mono text-ts-fg" title={row.password}>
-                                            {row.password || '—'}
-                                        </Cell>
                                         <Cell
                                             className="text-ts-muted"
                                             title={row.role_label || row.role}
@@ -174,6 +210,12 @@ export default function ClubUserDirectory({ clubs = [], clubId, clubName, rows =
                                             {row.is_active === false ? (
                                                 <span className="ms-1 text-[10px] text-rose-600">ανενεργός</span>
                                             ) : null}
+                                        </Cell>
+                                        <Cell className="text-ts-fg" title={emailTitle}>
+                                            {login || '—'}
+                                        </Cell>
+                                        <Cell className="font-mono text-ts-fg" title={row.password}>
+                                            {row.password || '—'}
                                         </Cell>
                                     </tr>
                                 );
@@ -186,6 +228,9 @@ export default function ClubUserDirectory({ clubs = [], clubId, clubName, rows =
             {clubName ? (
                 <p className="mt-2 text-xs text-ts-muted">
                     {filtered.length} / {rows.length} χρήστες · {clubName}
+                    {roleFilter
+                        ? ` · ${roleOptions.find((r) => r.value === roleFilter)?.label || roleFilter}`
+                        : ''}
                 </p>
             ) : null}
         </PlatformLayout>
