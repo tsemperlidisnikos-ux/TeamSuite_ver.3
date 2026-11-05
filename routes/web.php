@@ -278,6 +278,8 @@ Route::middleware(['auth', 'verified', 'platform'])->prefix('platform')->name('p
     Route::post('/users', [PlatformUserController::class, 'store'])->name('users.store');
     Route::post('/users/enter', [PlatformUserController::class, 'enter'])->name('users.enter');
     Route::delete('/users/{id}', [PlatformUserController::class, 'destroy'])->name('users.destroy');
+    Route::get('/club-users', [PlatformUserController::class, 'clubDirectory'])->name('club-users.index');
+    Route::get('/club-users/export', [PlatformUserController::class, 'exportClubDirectory'])->name('club-users.export');
     Route::get('/clubs', [PlatformClubController::class, 'index'])->name('clubs.index');
     Route::post('/clubs/{id}/activate', [PlatformClubController::class, 'activate'])->name('clubs.activate');
     Route::patch('/clubs/{id}/license', [PlatformClubController::class, 'updateLicense'])->name('clubs.license');

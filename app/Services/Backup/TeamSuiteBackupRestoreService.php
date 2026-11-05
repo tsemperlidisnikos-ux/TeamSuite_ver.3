@@ -8,8 +8,8 @@ use App\Models\ClubSetting;
 use App\Models\LicensePackage;
 use App\Models\User;
 use App\Support\Roles;
+use App\Support\UserPasswordVault;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 /**
@@ -247,7 +247,8 @@ class TeamSuiteBackupRestoreService
                 $user = User::query()->create([
                     'name' => $name,
                     'email' => $email,
-                    'password' => Hash::make($plainPassword),
+                    'password' => $plainPassword,
+                    'password_reveal' => UserPasswordVault::seal($plainPassword),
                     'email_verified_at' => now(),
                     'is_platform_admin' => false,
                     'active_club_id' => $club->id,

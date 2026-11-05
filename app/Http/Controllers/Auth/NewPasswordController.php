@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Support\UserPasswordVault;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules;
@@ -46,8 +46,10 @@ class NewPasswordController extends Controller
         $status = Password::reset(
             $request->only('email', 'password', 'password_confirmation', 'token'),
             function ($user) use ($request) {
+                $plain = (string) $request->password;
                 $user->forceFill([
-                    'password' => Hash::make($request->password),
+                    'password' => $plain,
+                    'password_reveal' => UserPasswordVault::seal($plain),
                     'remember_token' => Str::random(60),
                 ])->save();
 

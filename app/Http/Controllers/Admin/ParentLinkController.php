@@ -9,9 +9,9 @@ use App\Models\Athlete;
 use App\Models\ParentAthleteLink;
 use App\Models\User;
 use App\Support\Roles;
+use App\Support\UserPasswordVault;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -148,11 +148,13 @@ class ParentLinkController extends Controller
 
         $clubId = $this->clubId($request);
 
+        $plainPassword = $data['parent_password'] ?? str()->random(10);
         $parent = User::query()->firstOrCreate(
             ['email' => $data['parent_email']],
             [
                 'name' => $data['parent_name'] ?: 'Γονέας',
-                'password' => Hash::make($data['parent_password'] ?? str()->random(10)),
+                'password' => $plainPassword,
+                'password_reveal' => UserPasswordVault::seal($plainPassword),
                 'email_verified_at' => now(),
             ]
         );
@@ -162,7 +164,7 @@ class ParentLinkController extends Controller
         }
 
         if (! empty($data['parent_password'])) {
-            $parent->update(['password' => Hash::make($data['parent_password'])]);
+            UserPasswordVault::setPassword($parent, $data['parent_password']);
         }
 
         $parent->clubs()->syncWithoutDetaching([

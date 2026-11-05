@@ -22,6 +22,7 @@ use App\Services\Mail\ClubSmtpMailer;
 use App\Services\Platform\PlatformConfigService;
 use App\Support\Navigation;
 use App\Support\Roles;
+use App\Support\UserPasswordVault;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -523,14 +524,14 @@ class SettingsController extends Controller
                 'name' => $data['name'],
                 'email' => $data['email'],
                 'password' => $data['password'],
+                'password_reveal' => UserPasswordVault::seal($data['password']),
                 'email_verified_at' => now(),
                 'active_club_id' => $club->id,
             ]);
         } else {
             $user->fill(['name' => $data['name']])->save();
             if (! empty($data['password'])) {
-                $user->password = $data['password'];
-                $user->save();
+                UserPasswordVault::setPassword($user, $data['password']);
             }
         }
 
@@ -566,8 +567,7 @@ class SettingsController extends Controller
         $user = $club->users()->where('users.id', $id)->firstOrFail();
         $user->fill(['name' => $data['name']])->save();
         if (! empty($data['password'])) {
-            $user->password = $data['password'];
-            $user->save();
+            UserPasswordVault::setPassword($user, $data['password']);
         }
 
         $club->users()->updateExistingPivot($user->id, [

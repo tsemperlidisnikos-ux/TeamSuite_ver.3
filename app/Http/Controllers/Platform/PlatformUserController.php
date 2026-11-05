@@ -9,10 +9,12 @@ use App\Models\LoginActivity;
 use App\Models\User;
 use App\Services\Audit\ClubActivityLogger;
 use App\Services\Platform\PlatformConfigService;
+use App\Support\PersonNameSplitter;
+use App\Support\SimpleXlsxExporter;
+use App\Support\UserPasswordVault;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -272,7 +274,8 @@ class PlatformUserController extends Controller
         $user = User::query()->create([
             'name' => $data['name'],
             'email' => $data['email'],
-            'password' => Hash::make($data['password']),
+            'password' => $data['password'],
+            'password_reveal' => UserPasswordVault::seal($data['password']),
             'email_verified_at' => now(),
             'is_platform_admin' => $data['role'] === 'platform_admin',
             'active_club_id' => $data['role'] === 'platform_admin' ? null : $data['club_id'],
@@ -303,6 +306,96 @@ class PlatformUserController extends Controller
         $user->delete();
 
         return back()->with('success', 'Ο χρήστης διαγράφηκε.');
+    }
+
+    public function clubDirectory(Request $request, PlatformConfigService $config): Response
+    {
+        abort_unless($request->user()?->is_platform_admin, 403);
+
+        $clubs = Club::query()->orderBy('name')->get(['id', 'name']);
+        $clubId = (string) $request->query('club_id', $clubs->first()?->id ?? '');
+        $selected = $clubs->firstWhere('id', $clubId);
+        if (! $selected && $clubs->isNotEmpty()) {
+            $selected = $clubs->first();
+            $clubId = (string) $selected->id;
+        }
+
+        $labels = $config->roleLabels();
+        $rows = $selected
+            ? $this->clubCredentialRows($selected, $labels)
+            : [];
+
+        return Inertia::render('Platform/ClubUserDirectory', [
+            'clubs' => $clubs,
+            'clubId' => $clubId !== '' ? $clubId : null,
+            'clubName' => $selected?->name,
+            'rows' => $rows,
+            'passwordNote' => 'Οι κωδικοί εμφανίζονται μόνο στον Platform Admin. Αν λείπει κάποιος, θα εμφανιστεί μετά την επόμενη είσοδο ή αλλαγή κωδικού του χρήστη.',
+        ]);
+    }
+
+    public function exportClubDirectory(Request $request, PlatformConfigService $config): SymfonyResponse
+    {
+        abort_unless($request->user()?->is_platform_admin, 403);
+
+        $data = $request->validate([
+            'club_id' => ['required', 'string', 'max:64', 'exists:clubs,id'],
+        ]);
+
+        $club = Club::query()->findOrFail($data['club_id']);
+        $rows = $this->clubCredentialRows($club, $config->roleLabels());
+
+        $exportRows = array_map(
+            static fn (array $row): array => [
+                $row['last_name'],
+                $row['first_name'],
+                $row['email'],
+                $row['username'],
+                $row['password'],
+            ],
+            $rows,
+        );
+
+        $safeSlug = preg_replace('/[^\w\-]+/u', '_', $club->slug ?: $club->name) ?: 'club';
+
+        return SimpleXlsxExporter::download(
+            'club-users-'.$safeSlug.'.xlsx',
+            'Χρήστες',
+            ['ΕΠΩΝΥΜΟ', 'ΟΝΟΜΑ', 'EMAIL', 'USERNAME', 'PASSWORD'],
+            $exportRows,
+        );
+    }
+
+    /**
+     * @param  array<string, string>  $labels
+     * @return list<array{last_name: string, first_name: string, email: string, username: string, password: string, role: string, role_label: string, is_active: bool}>
+     */
+    private function clubCredentialRows(Club $club, array $labels): array
+    {
+        return User::query()
+            ->whereHas('clubs', fn ($q) => $q->where('clubs.id', $club->id))
+            ->with(['clubs' => fn ($q) => $q->where('clubs.id', $club->id)])
+            ->orderBy('name')
+            ->get()
+            ->map(function (User $user) use ($labels) {
+                $pivot = $user->clubs->first()?->pivot;
+                $role = (string) ($pivot?->role ?? '');
+                $parts = PersonNameSplitter::split((string) $user->name);
+                $email = (string) $user->email;
+
+                return [
+                    'last_name' => $parts['last_name'],
+                    'first_name' => $parts['first_name'],
+                    'email' => $email,
+                    'username' => $email,
+                    'password' => UserPasswordVault::open($user->password_reveal),
+                    'role' => $role,
+                    'role_label' => $labels[$role] ?? $role,
+                    'is_active' => (bool) ($pivot?->is_active ?? true),
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     /**
