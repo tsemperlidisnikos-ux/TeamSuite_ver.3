@@ -1,6 +1,6 @@
 import { FieldInput } from '@/Components/ResourceForm';
 import { router } from '@inertiajs/react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 function formatCell(value, columnKey) {
     if (columnKey === 'photo_url') {
@@ -55,6 +55,7 @@ export default function ResourceTable({
 }) {
     const [editingId, setEditingId] = useState(null);
     const [editData, setEditData] = useState({});
+    const editFormRef = useRef(null);
 
     const startEdit = (row) => {
         setEditingId(row.id);
@@ -65,6 +66,13 @@ export default function ResourceTable({
         });
         setEditData(data);
     };
+
+    useEffect(() => {
+        if (!editingId || !editFormRef.current) {
+            return;
+        }
+        editFormRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, [editingId]);
 
     const submitEdit = (e) => {
         e.preventDefault();
@@ -94,6 +102,52 @@ export default function ResourceTable({
 
     return (
         <div className="overflow-x-auto rounded-lg border border-ts-border">
+            {editingId && updateRoute && (
+                <form
+                    ref={editFormRef}
+                    onSubmit={submitEdit}
+                    className="sticky top-0 z-20 border-b border-sky-200 bg-sky-50 p-4 shadow-sm"
+                >
+                    <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-sky-800">
+                        Επεξεργασία εγγραφής
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        {fields.map((field) => (
+                            <label key={field.name} className="block text-sm">
+                                <span className="text-slate-600">{field.label}</span>
+                                <FieldInput
+                                    field={field}
+                                    value={editData[field.name]}
+                                    onChange={(v) =>
+                                        setEditData((d) => ({
+                                            ...d,
+                                            [field.name]: v,
+                                        }))
+                                    }
+                                />
+                            </label>
+                        ))}
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                        <button
+                            type="submit"
+                            className="rounded-md bg-ts-accent px-3 py-1.5 text-sm font-medium text-ts-accent-fg hover:bg-ts-accent-hover"
+                        >
+                            Αποθήκευση αλλαγών
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setEditingId(null);
+                                setEditData({});
+                            }}
+                            className="rounded-md px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900"
+                        >
+                            Ακύρωση
+                        </button>
+                    </div>
+                </form>
+            )}
             <table className="min-w-full divide-y divide-ts-border text-sm">
                 <thead className="bg-ts-surface-2 text-left text-xs uppercase tracking-wider text-ts-muted">
                     <tr>
@@ -118,8 +172,8 @@ export default function ResourceTable({
                             key={row.id}
                             className={
                                 editingId === row.id
-                                    ? 'bg-sky-950/30'
-                                    : 'hover:bg-ts-surface/[0.02]'
+                                    ? 'bg-sky-50 ring-1 ring-inset ring-sky-200'
+                                    : 'hover:bg-slate-50'
                             }
                         >
                             {selectable && (
@@ -202,49 +256,6 @@ export default function ResourceTable({
                     ))}
                 </tbody>
             </table>
-
-            {editingId && updateRoute && (
-                <form
-                    onSubmit={submitEdit}
-                    className="border-t border-ts-border bg-ts-surface-2 p-4"
-                >
-                    <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-ts-muted">
-                        Επεξεργασία εγγραφής
-                    </p>
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                        {fields.map((field) => (
-                            <label key={field.name} className="block text-sm">
-                                <span className="text-ts-muted">{field.label}</span>
-                                <FieldInput
-                                    field={field}
-                                    value={editData[field.name]}
-                                    onChange={(v) =>
-                                        setEditData((d) => ({
-                                            ...d,
-                                            [field.name]: v,
-                                        }))
-                                    }
-                                />
-                            </label>
-                        ))}
-                    </div>
-                    <div className="mt-3 flex gap-2">
-                        <button
-                            type="submit"
-                            className="rounded-md bg-ts-accent px-3 py-1.5 text-sm font-medium text-ts-accent-fg hover:bg-ts-accent-hover"
-                        >
-                            Αποθήκευση αλλαγών
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setEditingId(null)}
-                            className="rounded-md px-3 py-1.5 text-sm text-ts-muted hover:text-ts-fg"
-                        >
-                            Ακύρωση
-                        </button>
-                    </div>
-                </form>
-            )}
         </div>
     );
 }
