@@ -5,19 +5,9 @@ import { useMemo, useState } from 'react';
 const field =
     'w-full rounded-md border border-ts-border bg-ts-surface px-2 py-1.5 text-sm text-ts-fg';
 const btn = 'rounded-md bg-ts-accent px-3 py-1.5 text-sm text-ts-accent-fg hover:bg-ts-accent-hover disabled:opacity-50';
-const btnSecondary =
-    'rounded-md border border-ts-border bg-ts-surface px-3 py-1.5 text-sm text-ts-fg hover:bg-ts-surface-2 disabled:opacity-50';
 
-export default function ClubUserDirectory({
-    clubs = [],
-    clubId,
-    clubName,
-    rows = [],
-    passwordNote,
-    missingPasswordCount = 0,
-}) {
+export default function ClubUserDirectory({ clubs = [], clubId, clubName, rows = [], passwordNote }) {
     const [query, setQuery] = useState('');
-    const [filling, setFilling] = useState(false);
 
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase();
@@ -47,28 +37,6 @@ export default function ClubUserDirectory({
             return;
         }
         window.location.href = route('platform.club-users.export', { club_id: clubId });
-    };
-
-    const fillPasswords = () => {
-        if (!clubId || missingPasswordCount < 1 || filling) {
-            return;
-        }
-        const ok = window.confirm(
-            `Θα δημιουργηθούν ${missingPasswordCount} νέοι προσωρινοί κωδικοί.\n` +
-                'Οι παλιοί κωδικοί αυτών των χρηστών ΔΕΝ θα ισχύουν πλέον.\nΣυνέχεια;',
-        );
-        if (!ok) {
-            return;
-        }
-        setFilling(true);
-        router.post(
-            route('platform.club-users.fill-passwords'),
-            { club_id: clubId },
-            {
-                preserveScroll: true,
-                onFinish: () => setFilling(false),
-            },
-        );
     };
 
     return (
@@ -105,18 +73,6 @@ export default function ClubUserDirectory({
                         placeholder="Επώνυμο, email…"
                     />
                 </label>
-                <button
-                    type="button"
-                    className={btnSecondary}
-                    disabled={!clubId || missingPasswordCount < 1 || filling}
-                    onClick={fillPasswords}
-                >
-                    {filling
-                        ? 'Δημιουργία…'
-                        : missingPasswordCount > 0
-                          ? `Δημιουργία κωδικών (${missingPasswordCount})`
-                          : 'Όλοι έχουν κωδικό'}
-                </button>
                 <button type="button" className={btn} disabled={!clubId || rows.length === 0} onClick={exportXlsx}>
                     Εξαγωγή XLSX
                 </button>
@@ -173,7 +129,6 @@ export default function ClubUserDirectory({
             {clubName ? (
                 <p className="mt-3 text-xs text-ts-muted">
                     {filtered.length} / {rows.length} χρήστες · {clubName}
-                    {missingPasswordCount > 0 ? ` · ${missingPasswordCount} χωρίς κωδικό` : ''}
                 </p>
             ) : null}
         </PlatformLayout>
