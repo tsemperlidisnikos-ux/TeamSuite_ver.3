@@ -325,12 +325,15 @@ class PlatformUserController extends Controller
             ? $this->clubCredentialRows($selected, $labels)
             : [];
 
+        $missingPasswords = collect($rows)->filter(fn (array $row) => ($row['password'] ?? '') === '')->count();
+
         return Inertia::render('Platform/ClubUserDirectory', [
             'clubs' => $clubs,
             'clubId' => $clubId !== '' ? $clubId : null,
             'clubName' => $selected?->name,
             'rows' => $rows,
-            'passwordNote' => 'Οι κωδικοί εμφανίζονται μόνο στον Platform Admin. Αν λείπει κάποιος, θα εμφανιστεί μετά την επόμενη είσοδο ή αλλαγή κωδικού του χρήστη.',
+            'missingPasswordCount' => $missingPasswords,
+            'passwordNote' => 'Οι παλιοί κωδικοί είναι κρυπτογραφημένοι και δεν ανακτώνται. Αν η στήλη PASSWORD είναι κενή, πάτα «Δημιουργία κωδικών» για προσωρινούς κωδικούς (αντικαθιστούν τους παλιούς).',
         ]);
     }
 
@@ -366,9 +369,44 @@ class PlatformUserController extends Controller
         );
     }
 
+    public function fillMissingPasswords(Request $request): RedirectResponse
+    {
+        abort_unless($request->user()?->is_platform_admin, 403);
+
+        $data = $request->validate([
+            'club_id' => ['required', 'string', 'max:64', 'exists:clubs,id'],
+        ]);
+
+        $club = Club::query()->findOrFail($data['club_id']);
+        $filled = 0;
+
+        User::query()
+            ->whereHas('clubs', fn ($q) => $q->where('clubs.id', $club->id))
+            ->orderBy('id')
+            ->each(function (User $user) use (&$filled) {
+                if (UserPasswordVault::open($user->password_reveal) !== '') {
+                    return;
+                }
+
+                // Readable temporary password for PA directory / XLSX handoff.
+                $plain = Str::lower(Str::random(4)).'-'.Str::lower(Str::random(4)).'-'.random_int(10, 99);
+                UserPasswordVault::setPassword($user, $plain);
+                $filled++;
+            });
+
+        return redirect()
+            ->route('platform.club-users.index', ['club_id' => $club->id])
+            ->with(
+                'success',
+                $filled > 0
+                    ? "Δημιουργήθηκαν {$filled} προσωρινοί κωδικοί. Εξάγετε τώρα το XLSX."
+                    : 'Όλοι οι χρήστες είχαν ήδη αποθηκευμένο κωδικό.'
+            );
+    }
+
     /**
      * @param  array<string, string>  $labels
-     * @return list<array{last_name: string, first_name: string, email: string, username: string, password: string, role: string, role_label: string, is_active: bool}>
+     * @return list<array{user_id: int, last_name: string, first_name: string, email: string, username: string, password: string, role: string, role_label: string, is_active: bool}>
      */
     private function clubCredentialRows(Club $club, array $labels): array
     {
@@ -384,6 +422,7 @@ class PlatformUserController extends Controller
                 $email = (string) $user->email;
 
                 return [
+                    'user_id' => $user->id,
                     'last_name' => $parts['last_name'],
                     'first_name' => $parts['first_name'],
                     'email' => $email,

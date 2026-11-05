@@ -125,4 +125,72 @@ class PlatformClubUserDirectoryTest extends TestCase
             ->get(route('platform.club-users.export', ['club_id' => $club->id]))
             ->assertForbidden();
     }
+
+    public function test_platform_admin_can_fill_missing_passwords_for_club(): void
+    {
+        $club = Club::query()->create([
+            'id' => (string) Str::uuid(),
+            'name' => 'Fill Club',
+            'slug' => 'fill-'.Str::random(4),
+            'is_active' => true,
+        ]);
+
+        $platformAdmin = User::factory()->create([
+            'password' => Hash::make('password'),
+            'email_verified_at' => now(),
+            'is_platform_admin' => true,
+        ]);
+
+        $withoutReveal = User::factory()->create([
+            'name' => 'Κενός Κωδικός',
+            'email' => 'empty-pass@example.com',
+            'password' => Hash::make('old-secret'),
+            'password_reveal' => null,
+            'email_verified_at' => now(),
+            'is_platform_admin' => false,
+            'active_club_id' => $club->id,
+        ]);
+        $withoutReveal->clubs()->attach($club->id, [
+            'role' => 'parent',
+            'permissions' => json_encode([]),
+            'finance_own_entries_only' => false,
+            'is_active' => true,
+        ]);
+
+        $withReveal = User::factory()->create([
+            'name' => 'Έχει Κωδικό',
+            'email' => 'has-pass@example.com',
+            'password' => 'keep-me',
+            'password_reveal' => UserPasswordVault::seal('keep-me'),
+            'email_verified_at' => now(),
+            'is_platform_admin' => false,
+            'active_club_id' => $club->id,
+        ]);
+        $withReveal->clubs()->attach($club->id, [
+            'role' => 'coach',
+            'permissions' => json_encode([]),
+            'finance_own_entries_only' => false,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($platformAdmin)
+            ->post(route('platform.club-users.fill-passwords'), ['club_id' => $club->id])
+            ->assertRedirect(route('platform.club-users.index', ['club_id' => $club->id]));
+
+        $withoutReveal->refresh();
+        $withReveal->refresh();
+
+        $newPlain = UserPasswordVault::open($withoutReveal->password_reveal);
+        $this->assertNotSame('', $newPlain);
+        $this->assertTrue(Hash::check($newPlain, $withoutReveal->password));
+        $this->assertSame('keep-me', UserPasswordVault::open($withReveal->password_reveal));
+
+        $this->actingAs($platformAdmin)
+            ->get(route('platform.club-users.index', ['club_id' => $club->id]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('missingPasswordCount', 0)
+                ->has('rows', 2)
+            );
+    }
 }
