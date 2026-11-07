@@ -255,7 +255,7 @@ export default function Rent({
                         <img
                             src={hero}
                             alt={club.name}
-                            className="max-h-56 w-full object-cover object-center bg-slate-600"
+                            className="h-auto w-full bg-slate-600 object-contain"
                         />
                     ) : (
                         <div className="flex h-32 items-center justify-center bg-slate-600 text-5xl font-semibold">
