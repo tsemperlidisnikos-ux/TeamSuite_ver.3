@@ -41,4 +41,11 @@ return [
         'subject' => env('VAPID_SUBJECT', 'mailto:admin@teamsuite.me'),
     ],
 
+    /*
+    | Legacy TeamSuite (Vercel) Blob media — used until /api/club-media paths are migrated.
+    */
+    'teamsuite_legacy' => [
+        'media_base_url' => env('TEAMSUITE_LEGACY_MEDIA_BASE_URL', 'https://teamsuite-seven.vercel.app'),
+    ],
+
 ];

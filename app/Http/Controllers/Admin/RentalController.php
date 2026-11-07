@@ -667,15 +667,15 @@ class RentalController extends ClubResourceController
             'notes' => array_key_exists('notes', $data)
                 ? (string) ($data['notes'] ?? '')
                 : $existingPayload['notes'],
-            'heroImageUrl' => array_key_exists('hero_image_url', $data)
-                ? ClubPublicMedia::normalizeForStorage(
-                    $data['hero_image_url'] !== null && $data['hero_image_url'] !== ''
-                        ? (string) $data['hero_image_url']
-                        : null,
-                    $clubId,
-                    'club-media/rent-hero',
-                )
-                : $existingPayload['heroImageUrl'],
+            // Photos are managed by upload-media; never wipe an existing path when the
+            // browser sends null (legacy /api/club-media URLs resolve to null in the UI).
+            'heroImageUrl' => $this->resolvePersistedMediaPath(
+                array_key_exists('hero_image_url', $data),
+                $data['hero_image_url'] ?? null,
+                $existingPayload['heroImageUrl'],
+                $clubId,
+                'club-media/rent-hero',
+            ),
         ];
 
         $publicEnabled = array_key_exists('public_enabled', $data)
@@ -707,13 +707,20 @@ class RentalController extends ClubResourceController
 
             $meta = is_array($facility->meta) ? $facility->meta : [];
             if (array_key_exists('photoUrl', $facilityPayload)) {
-                $photo = $facilityPayload['photoUrl'];
-                $meta['photoUrl'] = ClubPublicMedia::normalizeForStorage(
-                    $photo !== null && $photo !== '' ? (string) $photo : null,
+                $existingPhoto = isset($meta['photoUrl'])
+                    ? (string) $meta['photoUrl']
+                    : (isset($meta['photo_url']) ? (string) $meta['photo_url'] : null);
+                $resolved = $this->resolvePersistedMediaPath(
+                    true,
+                    $facilityPayload['photoUrl'] ?? null,
+                    $existingPhoto !== '' ? $existingPhoto : null,
                     $clubId,
                     'club-media/facilities',
                 );
-                unset($meta['photo_url']);
+                if ($resolved !== null) {
+                    $meta['photoUrl'] = $resolved;
+                    unset($meta['photo_url']);
+                }
             }
             if (array_key_exists('sports', $facilityPayload) && is_array($facilityPayload['sports'])) {
                 $meta['sports'] = array_values(array_map('strval', $facilityPayload['sports']));
@@ -760,6 +767,30 @@ class RentalController extends ClubResourceController
             'notes' => (string) ($rules['notes'] ?? ''),
             'heroImageUrl' => isset($rules['heroImageUrl']) ? (string) $rules['heroImageUrl'] : null,
         ];
+    }
+
+    /**
+     * Keep an existing stored media path unless the request provides a new durable one.
+     * Availability saves often send null for legacy TeamSuite /api/club-media URLs.
+     */
+    private function resolvePersistedMediaPath(
+        bool $provided,
+        mixed $incoming,
+        ?string $existing,
+        string $clubId,
+        string $prefix,
+    ): ?string {
+        if (! $provided) {
+            return $existing;
+        }
+
+        if (! is_string($incoming) || trim($incoming) === '') {
+            return $existing;
+        }
+
+        $normalized = ClubPublicMedia::normalizeForStorage(trim($incoming), $clubId, $prefix);
+
+        return $normalized ?? $existing;
     }
 
     /**

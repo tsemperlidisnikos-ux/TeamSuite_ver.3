@@ -89,6 +89,12 @@ final class ClubPublicMedia
         }
 
         if (self::isLegacyClubMediaPath($value)) {
+            // Still hosted on the legacy TeamSuite Blob until migrated to local storage.
+            $legacyBase = rtrim((string) config('services.teamsuite_legacy.media_base_url', ''), '/');
+            if ($legacyBase !== '' && str_starts_with($value, '/api/club-media')) {
+                return $legacyBase.$value;
+            }
+
             return null;
         }
 

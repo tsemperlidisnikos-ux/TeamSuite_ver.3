@@ -8,13 +8,25 @@ use Tests\TestCase;
 
 class ClubPublicMediaTest extends TestCase
 {
-    public function test_legacy_club_media_paths_resolve_to_null(): void
+    public function test_legacy_club_media_paths_use_configured_base_url(): void
     {
-        $this->assertNull(ClubPublicMedia::publicUrl(
-            '/api/club-media?p=ss360-media%2Fclub_1%2Fphoto.jpg&v='
-        ));
+        config(['services.teamsuite_legacy.media_base_url' => 'https://teamsuite-seven.vercel.app']);
+
+        $this->assertSame(
+            'https://teamsuite-seven.vercel.app/api/club-media?p=ss360-media%2Fclub_1%2Fphoto.jpg&v=',
+            ClubPublicMedia::publicUrl('/api/club-media?p=ss360-media%2Fclub_1%2Fphoto.jpg&v='),
+        );
         $this->assertTrue(ClubPublicMedia::isLegacyClubMediaPath(
             '/api/club-media?p=ss360-media/club_1/photo.jpg'
+        ));
+    }
+
+    public function test_legacy_paths_stay_null_without_base_url(): void
+    {
+        config(['services.teamsuite_legacy.media_base_url' => '']);
+
+        $this->assertNull(ClubPublicMedia::publicUrl(
+            '/api/club-media?p=ss360-media%2Fclub_1%2Fphoto.jpg&v='
         ));
     }
 

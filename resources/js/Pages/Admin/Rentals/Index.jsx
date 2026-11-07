@@ -395,11 +395,10 @@ export default function Index({
             {
                 public_enabled: publicEnabled,
                 notes,
-                hero_image_url: heroUrl,
+                // hero + facility photos are saved only via upload-media (avoid wiping legacy URLs)
                 rules,
                 facilities: draftFacilities.map((f) => ({
                     id: f.id,
-                    photoUrl: f.photoUrl,
                     is_rentable: Boolean(draftRules[f.id]?.enabled ?? f.is_rentable),
                     sports: f.sports,
                 })),
