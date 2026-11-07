@@ -694,8 +694,13 @@ class RentalController extends ClubResourceController
         $clubSettings->public_rent_enabled = $publicEnabled;
         $clubSettings->save();
 
-        foreach ($data['facilities'] ?? [] as $facilityPayload) {
-            $facilityId = (string) ($facilityPayload['id'] ?? '');
+        $facilityPayloads = collect($data['facilities'] ?? [])
+            ->filter(fn ($row) => is_array($row))
+            ->keyBy(fn (array $row) => (string) ($row['id'] ?? ''));
+
+        // Keep facilities.is_rentable aligned with rules.enabled for every court in the save.
+        foreach ($normalizedRules as $rule) {
+            $facilityId = (string) ($rule['facilityId'] ?? '');
             if ($facilityId === '' || ! isset($allowed[$facilityId])) {
                 continue;
             }
@@ -706,7 +711,8 @@ class RentalController extends ClubResourceController
             }
 
             $meta = is_array($facility->meta) ? $facility->meta : [];
-            if (array_key_exists('photoUrl', $facilityPayload)) {
+            $facilityPayload = $facilityPayloads->get($facilityId);
+            if (is_array($facilityPayload) && array_key_exists('photoUrl', $facilityPayload)) {
                 $existingPhoto = isset($meta['photoUrl'])
                     ? (string) $meta['photoUrl']
                     : (isset($meta['photo_url']) ? (string) $meta['photo_url'] : null);
@@ -722,21 +728,14 @@ class RentalController extends ClubResourceController
                     unset($meta['photo_url']);
                 }
             }
-            if (array_key_exists('sports', $facilityPayload) && is_array($facilityPayload['sports'])) {
+            if (is_array($facilityPayload) && array_key_exists('sports', $facilityPayload) && is_array($facilityPayload['sports'])) {
                 $meta['sports'] = array_values(array_map('strval', $facilityPayload['sports']));
             }
 
-            $updates = ['meta' => $meta];
-            if (array_key_exists('is_rentable', $facilityPayload)) {
-                $updates['is_rentable'] = (bool) $facilityPayload['is_rentable'];
-            } else {
-                $matchingRule = collect($normalizedRules)->firstWhere('facilityId', $facilityId);
-                if ($matchingRule) {
-                    $updates['is_rentable'] = (bool) $matchingRule['enabled'];
-                }
-            }
-
-            $facility->fill($updates)->save();
+            $facility->fill([
+                'meta' => $meta,
+                'is_rentable' => (bool) ($rule['enabled'] ?? false),
+            ])->save();
         }
 
         return redirect()

@@ -13,6 +13,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class RentalsMediaPersistenceTest extends TestCase
@@ -122,5 +123,51 @@ class RentalsMediaPersistenceTest extends TestCase
             'https://teamsuite-seven.vercel.app/api/club-media?p=ss360-media%2Fclub_1%2Fphoto.jpg&v=1',
             $url,
         );
+    }
+
+    public function test_public_rent_shows_enabled_facilities_even_when_is_rentable_flag_is_false(): void
+    {
+        Storage::fake('public');
+
+        $club = Club::query()->create([
+            'id' => (string) Str::uuid(),
+            'name' => 'Rent Flag Club',
+            'slug' => 'rent-flag-'.Str::random(4),
+            'is_active' => true,
+        ]);
+
+        $path = 'club-media/facilities/'.$club->id.'/court.jpg';
+        Storage::disk('public')->put($path, 'fake-image');
+
+        $facility = Facility::query()->withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(),
+            'club_id' => $club->id,
+            'name' => 'Κλειστό Β',
+            'is_rentable' => false,
+            'meta' => ['photoUrl' => $path],
+        ]);
+
+        RentalSetting::query()->withoutGlobalScopes()->create([
+            'club_id' => $club->id,
+            'public_enabled' => true,
+            'rules' => [[
+                'facilityId' => $facility->id,
+                'enabled' => true,
+                'slotMinutes' => 60,
+                'hourlyRateFull' => 40,
+                'hourlyRateHalf' => 20,
+                'windows' => [['days' => [1, 2, 3, 4, 5], 'startTime' => '18:00', 'endTime' => '22:00']],
+            ]],
+        ]);
+
+        $this->get(route('public.rent.show', $club->slug))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Public/Rent')
+                ->where('publicEnabled', true)
+                ->has('facilities', 1)
+                ->where('facilities.0.id', $facility->id)
+                ->where('facilities.0.photoUrl', fn ($url) => is_string($url) && str_contains($url, '/storage/'.$path))
+            );
     }
 }

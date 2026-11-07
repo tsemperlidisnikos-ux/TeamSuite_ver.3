@@ -33,15 +33,20 @@ class RentController extends Controller
         $prices = [];
 
         if ($publicEnabled) {
+            // Availability rules are the source of truth for the public page. The
+            // facilities.is_rentable flag can drift after imports/saves and would
+            // otherwise hide courts (and their photos) even when rules.enabled=true.
             $facilities = Facility::query()->withoutGlobalScopes()
                 ->where('club_id', $club->id)
-                ->where('is_rentable', true)
                 ->orderBy('name')
-                ->get(['id', 'name', 'meta'])
+                ->get(['id', 'name', 'meta', 'is_rentable'])
                 ->filter(function (Facility $facility) use ($rulesByFacility) {
                     $rule = $rulesByFacility[$facility->id] ?? null;
+                    if ($rule !== null) {
+                        return (bool) ($rule['enabled'] ?? false);
+                    }
 
-                    return $rule === null || (bool) ($rule['enabled'] ?? true);
+                    return (bool) $facility->is_rentable;
                 })
                 ->values()
                 ->map(function (Facility $facility) use ($rulesByFacility) {
