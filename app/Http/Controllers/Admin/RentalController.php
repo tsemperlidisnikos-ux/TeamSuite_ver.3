@@ -12,6 +12,7 @@ use App\Models\SportMatch;
 use App\Models\Training;
 use App\Services\Audit\ClubActivityLogger;
 use App\Support\ClubPublicMedia;
+use App\Support\RentalFacilityIdMap;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -84,6 +85,10 @@ class RentalController extends ClubResourceController
 
         $rentalSettings = RentalSetting::query()->where('club_id', $clubId)->first();
         $rulesPayload = $this->normalizeRulesPayload($rentalSettings?->rules);
+        $rulesPayload['rules'] = RentalFacilityIdMap::remapRules(
+            $rulesPayload['rules'],
+            RentalFacilityIdMap::legacyToUuid($clubId),
+        );
 
         $bookings = RentalBooking::query()
             ->where('club_id', $clubId)
@@ -613,9 +618,15 @@ class RentalController extends ClubResourceController
             ->pluck('id')
             ->all();
         $allowed = array_flip($facilityIds);
+        $legacyToUuid = RentalFacilityIdMap::legacyToUuid($clubId);
+
+        $incomingRules = RentalFacilityIdMap::remapRules(
+            array_values(array_filter($data['rules'] ?? [], 'is_array')),
+            $legacyToUuid,
+        );
 
         $normalizedRules = [];
-        foreach ($data['rules'] as $rule) {
+        foreach ($incomingRules as $rule) {
             $facilityId = (string) ($rule['facilityId'] ?? '');
             if ($facilityId === '' || ! isset($allowed[$facilityId])) {
                 continue;

@@ -8,6 +8,7 @@ use App\Models\Facility;
 use App\Models\RentalBooking;
 use App\Models\RentalSetting;
 use App\Support\ClubPublicMedia;
+use App\Support\RentalFacilityIdMap;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -27,7 +28,9 @@ class RentController extends Controller
             : (bool) ($clubSettings?->public_rent_enabled ?? false);
 
         $rulesPayload = $this->normalizeRulesPayload($rentalSettings?->rules);
-        $rulesByFacility = $this->rulesByFacilityId($rulesPayload['rules']);
+        $legacyToUuid = RentalFacilityIdMap::legacyToUuid($club->id);
+        $normalizedRules = RentalFacilityIdMap::remapRules($rulesPayload['rules'], $legacyToUuid);
+        $rulesByFacility = $this->rulesByFacilityId($normalizedRules);
 
         $facilities = collect();
         $prices = [];
@@ -39,7 +42,7 @@ class RentController extends Controller
             $facilities = Facility::query()->withoutGlobalScopes()
                 ->where('club_id', $club->id)
                 ->orderBy('name')
-                ->get(['id', 'name', 'meta', 'is_rentable'])
+                ->get(['id', 'name', 'meta', 'is_rentable', 'legacy_id'])
                 ->filter(function (Facility $facility) use ($rulesByFacility) {
                     $rule = $rulesByFacility[$facility->id] ?? null;
                     if ($rule !== null) {

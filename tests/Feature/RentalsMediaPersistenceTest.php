@@ -170,4 +170,50 @@ class RentalsMediaPersistenceTest extends TestCase
                 ->where('facilities.0.photoUrl', fn ($url) => is_string($url) && str_contains($url, '/storage/'.$path))
             );
     }
+
+    public function test_public_rent_resolves_legacy_facility_ids_in_rules(): void
+    {
+        Storage::fake('public');
+
+        $club = Club::query()->create([
+            'id' => (string) Str::uuid(),
+            'name' => 'Legacy Rent Club',
+            'slug' => 'legacy-rent-'.Str::random(4),
+            'is_active' => true,
+        ]);
+
+        $path = 'club-media/facilities/'.$club->id.'/court.jpg';
+        Storage::disk('public')->put($path, 'fake-image');
+
+        $facility = Facility::query()->withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(),
+            'club_id' => $club->id,
+            'name' => 'Κεντρική Σάλα',
+            'is_rentable' => false,
+            'legacy_id' => 'facility_52748daf',
+            'meta' => ['photoUrl' => $path],
+        ]);
+
+        RentalSetting::query()->withoutGlobalScopes()->create([
+            'club_id' => $club->id,
+            'public_enabled' => true,
+            'rules' => [[
+                'facilityId' => 'facility_52748daf',
+                'enabled' => true,
+                'slotMinutes' => 60,
+                'hourlyRateFull' => 80,
+                'hourlyRateHalf' => 50,
+                'windows' => [['days' => [1, 2, 3, 4, 5, 6, 0], 'startTime' => '20:00', 'endTime' => '23:00']],
+            ]],
+        ]);
+
+        $this->get(route('public.rent.show', $club->slug))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Public/Rent')
+                ->has('facilities', 1)
+                ->where('facilities.0.id', $facility->id)
+                ->where('facilities.0.photoUrl', fn ($url) => is_string($url) && str_contains($url, '/storage/'.$path))
+            );
+    }
 }
