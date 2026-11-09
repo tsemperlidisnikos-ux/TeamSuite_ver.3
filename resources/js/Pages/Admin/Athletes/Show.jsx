@@ -1051,18 +1051,6 @@ export default function Show({
                                         <option value="yes">Ναι</option>
                                     </select>
                                 </Field>
-                                <Field label="Μηνιαία συνδρομή (€)">
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        className={inputClass()}
-                                        disabled={!editing}
-                                        value={form.data.monthly_fee ?? ''}
-                                        onChange={(e) =>
-                                            form.setData('monthly_fee', e.target.value)
-                                        }
-                                    />
-                                </Field>
                             </div>
                         </Card>
 
