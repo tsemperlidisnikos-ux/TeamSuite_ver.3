@@ -108,4 +108,45 @@ class AthleteUpdateTest extends TestCase
         $this->assertSame('inactive', $athlete->status);
         $this->assertSame([(string) $package->id], $athlete->metaGet('clothing_package_ids'));
     }
+
+    public function test_admin_can_update_upgraded_package_received(): void
+    {
+        $club = Club::query()->create([
+            'id' => (string) Str::uuid(),
+            'name' => 'Demo Upgrade Pack',
+            'slug' => 'demo-upgrade-pack',
+            'is_active' => true,
+        ]);
+
+        $user = User::factory()->create([
+            'password' => Hash::make('password'),
+            'email_verified_at' => now(),
+            'active_club_id' => $club->id,
+        ]);
+        $user->clubs()->attach($club->id, ['role' => 'admin', 'is_active' => true]);
+
+        $athlete = Athlete::query()->withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(),
+            'club_id' => $club->id,
+            'first_name' => 'Έλενα',
+            'last_name' => 'Νικολάου',
+            'status' => 'active',
+            'monthly_fee' => 40,
+            'meta' => ['upgraded_package_received' => false],
+        ]);
+
+        $response = $this->actingAs($user)->patch(route('admin.athletes.update', $athlete->id), [
+            'first_name' => 'Έλενα',
+            'last_name' => 'Νικολάου',
+            'status' => 'active',
+            'monthly_fee' => 40,
+            'upgraded_package_received' => true,
+        ]);
+
+        $response->assertRedirect(route('admin.athletes.show', $athlete->id));
+        $response->assertSessionHasNoErrors();
+
+        $athlete->refresh();
+        $this->assertTrue((bool) $athlete->metaGet('upgraded_package_received'));
+    }
 }

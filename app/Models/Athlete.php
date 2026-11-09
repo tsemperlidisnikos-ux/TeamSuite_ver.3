@@ -20,7 +20,7 @@ class Athlete extends Model
         'preferred_parent_email', 'mother_phone', 'address', 'postal_code', 'city', 'county',
         'registration_number', 'club_name', 'sports', 'coach_names', 'jersey_number',
         'position', 'athletic_level', 'athletic_start_date', 'uniform_received', 'uniform_size',
-        'clothing_package_ids', 'blood_type', 'allergies', 'chronic_conditions', 'medication',
+        'clothing_package_ids', 'upgraded_package_received', 'blood_type', 'allergies', 'chronic_conditions', 'medication',
         'doctor_name', 'doctor_phone', 'emergency_name', 'emergency_phone', 'emergency_relation',
         'registration_expires', 'auto_renewal', 'consent_expires', 'comments', 'photo_url',
         'gdpr_items', 'amka_consent_at', 'registration_charge', 'monthly_charge', 'custom_charge',

@@ -619,6 +619,7 @@ class AthleteController extends Controller
             'uniform_size' => 'nullable|string|max:40',
             'clothing_package_ids' => 'nullable|array',
             'clothing_package_ids.*' => 'uuid',
+            'upgraded_package_received' => 'boolean',
             'blood_type' => 'nullable|string|max:8',
             'allergies' => 'nullable|string|max:2000',
             'chronic_conditions' => 'nullable|string|max:2000',

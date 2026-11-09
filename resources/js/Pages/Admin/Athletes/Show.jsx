@@ -250,6 +250,7 @@ export default function Show({
             uniform_received: !!athlete.uniform_received,
             uniform_size: athlete.uniform_size || '',
             clothing_package_ids: athlete.clothing_package_ids || [],
+            upgraded_package_received: !!athlete.upgraded_package_received,
             club_name: athlete.club_name || '',
             auto_renewal: !!athlete.auto_renewal,
             registration_charge: athlete.registration_charge !== false,
@@ -1032,6 +1033,22 @@ export default function Show({
                                                 {pkg.name}
                                             </option>
                                         ))}
+                                    </select>
+                                </Field>
+                                <Field label="Παραλαβή αναβαθμισμένου">
+                                    <select
+                                        className={inputClass()}
+                                        disabled={!editing}
+                                        value={form.data.upgraded_package_received ? 'yes' : 'no'}
+                                        onChange={(e) =>
+                                            form.setData(
+                                                'upgraded_package_received',
+                                                e.target.value === 'yes',
+                                            )
+                                        }
+                                    >
+                                        <option value="no">Όχι</option>
+                                        <option value="yes">Ναι</option>
                                     </select>
                                 </Field>
                                 <Field label="Μηνιαία συνδρομή (€)">
