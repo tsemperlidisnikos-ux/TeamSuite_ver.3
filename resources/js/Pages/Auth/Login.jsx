@@ -4,7 +4,7 @@ import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
-import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
 
 export default function Login({ status, canResetPassword, portalApp = null }) {
@@ -61,13 +61,6 @@ export default function Login({ status, canResetPassword, portalApp = null }) {
         if (replaced) return 'Συνδεθήκατε από άλλη συσκευή. Κάντε είσοδο ξανά.';
         return '';
     });
-    const [demoLoading, setDemoLoading] = useState(false);
-
-    const demoEmail = isParentApp
-        ? 'parent@teamsuite.app'
-        : isCoachApp
-          ? 'coach@teamsuite.app'
-          : 'demo@teamsuite.app';
 
     const { data, setData, post, processing, errors, reset } = useForm({
         email: '',
@@ -82,27 +75,6 @@ export default function Login({ status, canResetPassword, portalApp = null }) {
         post(route('login'), {
             onFinish: () => reset('password'),
         });
-    };
-
-    const enterDemo = () => {
-        setDemoLoading(true);
-        setInfo('');
-        router.post(
-            route('login'),
-            {
-                email: demoEmail,
-                password: 'demo1234',
-                remember: false,
-                portal_app: isPortalApp ? app : '',
-            },
-            {
-                onFinish: () => setDemoLoading(false),
-                onError: () => {
-                    setDemoLoading(false);
-                    setInfo('Αποτυχία εισόδου DEMO. Βεβαιωθείτε ότι υπάρχει ο λογαριασμός demo.');
-                },
-            },
-        );
     };
 
     return (
@@ -187,38 +159,10 @@ export default function Login({ status, canResetPassword, portalApp = null }) {
 
                 <PrimaryButton
                     className="w-full justify-center !normal-case tracking-normal"
-                    disabled={processing || demoLoading}
+                    disabled={processing}
                 >
                     Σύνδεση
                 </PrimaryButton>
-
-                <div className="flex items-center gap-3 text-xs text-ts-muted">
-                    <span className="h-px flex-1 bg-ts-border" />
-                    ή
-                    <span className="h-px flex-1 bg-ts-border" />
-                </div>
-
-                <button
-                    type="button"
-                    className="w-full rounded-md border border-ts-border bg-ts-surface px-4 py-2.5 text-sm font-medium text-ts-fg hover:bg-ts-hover disabled:opacity-60"
-                    disabled={processing || demoLoading}
-                    onClick={enterDemo}
-                >
-                    {demoLoading
-                        ? 'Φόρτωση DEMO…'
-                        : isParentApp
-                          ? 'Δοκιμή ως γονέας (DEMO)'
-                          : isCoachApp
-                            ? 'Δοκιμή ως προπονητής (DEMO)'
-                            : 'Είσοδος DEMO παρουσίασης'}
-                </button>
-                <p className="text-center text-xs text-ts-muted">
-                    {isParentApp
-                        ? `DEMO γονέα: ${demoEmail} / demo1234`
-                        : isCoachApp
-                          ? `DEMO προπονητή: ${demoEmail} / demo1234`
-                          : `DEMO: ${demoEmail} / demo1234`}
-                </p>
             </form>
 
             <p className="mt-6 text-center text-sm text-ts-muted">
