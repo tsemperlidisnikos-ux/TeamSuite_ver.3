@@ -56,7 +56,7 @@ class PrintController extends Controller
                 }
             }
 
-            $meta = $a->meta ?? [];
+            $meta = is_array($a->meta) ? $a->meta : [];
 
             return [
                 'id' => $a->id,
@@ -67,6 +67,8 @@ class PrintController extends Controller
                 'gender' => $a->gender,
                 'phone' => $a->phone,
                 'guardian_phone' => $a->guardian_phone,
+                'father_email' => trim((string) ($meta['father_email'] ?? $meta['fatherEmail'] ?? '')),
+                'mother_email' => trim((string) ($meta['mother_email'] ?? $meta['motherEmail'] ?? '')),
                 'monthly_fee' => (float) $a->monthly_fee,
                 'monthly_charge' => ($meta['monthly_charge'] ?? true) !== false,
                 'registration_charge' => (bool) ($meta['registration_charge'] ?? false),

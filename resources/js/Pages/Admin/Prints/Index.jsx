@@ -207,7 +207,7 @@ export default function Index({
     const exportCsv = () => {
         const header =
             selected === 'month-subscription'
-                ? 'Επώνυμο,Όνομα,Τμήμα,Κατάσταση,Χρέωση,Πληρωμή,Υπόλοιπο,Τηλ. γονέα'
+                ? 'Επώνυμο,Όνομα,Τμήμα,Email πατρός,Email μητρός,Κατάσταση,Χρέωση,Πληρωμή,Υπόλοιπο,Τηλ. γονέα'
                 : 'Επώνυμο,Όνομα,Άθλημα,Τμήμα';
         const lines = filtered.map((a) => {
             if (selected === 'month-subscription') {
@@ -215,6 +215,8 @@ export default function Index({
                     a.last_name,
                     a.first_name,
                     a.class_names || '',
+                    a.father_email || '',
+                    a.mother_email || '',
                     a.month_pay_status_label || '',
                     a.month_charged,
                     a.month_paid,
@@ -289,6 +291,8 @@ export default function Index({
                         {selected === 'month-subscription' ? (
                             <>
                                 <th className="py-1 pe-3">Τμήμα</th>
+                                <th className="py-1 pe-3">Email πατρός</th>
+                                <th className="py-1 pe-3">Email μητρός</th>
                                 <th className="py-1 pe-3">Κατάσταση</th>
                                 <th className="py-1 pe-3">Χρέωση</th>
                                 <th className="py-1 pe-3">Πληρωμή</th>
@@ -330,6 +334,8 @@ export default function Index({
                             {selected === 'month-subscription' ? (
                                 <>
                                     <td className="py-1.5 pe-3">{a.class_names || '—'}</td>
+                                    <td className="py-1.5 pe-3">{a.father_email || '—'}</td>
+                                    <td className="py-1.5 pe-3">{a.mother_email || '—'}</td>
                                     <td className="py-1.5 pe-3">{a.month_pay_status_label}</td>
                                     <td className="py-1.5 pe-3">
                                         {formatCurrency(a.month_charged || 0)}
@@ -354,7 +360,10 @@ export default function Index({
                     ))}
                     {!filtered.length && (
                         <tr>
-                            <td colSpan={9} className="py-8 text-center text-ts-muted">
+                            <td
+                                colSpan={selected === 'month-subscription' ? 11 : 5}
+                                className="py-8 text-center text-ts-muted"
+                            >
                                 Δεν βρέθηκαν εγγραφές με αυτά τα φίλτρα.
                             </td>
                         </tr>
@@ -363,7 +372,7 @@ export default function Index({
                 {selected === 'month-subscription' && filtered.length > 0 && monthTotals && (
                     <tfoot>
                         <tr className="border-t-2 border-ts-border bg-ts-surface-2/60 font-semibold text-ts-fg">
-                            <td className="py-2 pe-3" colSpan={5}>
+                            <td className="py-2 pe-3" colSpan={7}>
                                 Σύνολα ({filtered.length})
                             </td>
                             <td className="py-2 pe-3">
