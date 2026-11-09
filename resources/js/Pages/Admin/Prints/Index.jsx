@@ -1,5 +1,6 @@
 import AdminLayout from '@/Layouts/AdminLayout';
 import { formatCurrency } from '@/lib/portalFormat';
+import { downloadSimpleXlsx } from '@/utils/downloadSimpleXlsx';
 import { Head, router, usePage } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
 
@@ -204,39 +205,45 @@ export default function Index({
         );
     }, [filtered, selected]);
 
-    const exportCsv = () => {
-        const header =
-            selected === 'month-subscription'
-                ? 'Επώνυμο,Όνομα,Τμήμα,Email πατρός,Email μητρός,Κατάσταση,Χρέωση,Πληρωμή,Υπόλοιπο,Τηλ. γονέα'
-                : 'Επώνυμο,Όνομα,Άθλημα,Τμήμα';
-        const lines = filtered.map((a) => {
-            if (selected === 'month-subscription') {
-                return [
-                    a.last_name,
-                    a.first_name,
-                    a.class_names || '',
-                    a.father_email || '',
-                    a.mother_email || '',
-                    a.month_pay_status_label || '',
-                    a.month_charged,
-                    a.month_paid,
-                    a.month_remaining,
-                    a.guardian_phone || a.phone || '',
-                ]
-                    .map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`)
-                    .join(',');
-            }
-            return `"${a.last_name}","${a.first_name}","${a.sport || ''}","${a.class_names || ''}"`;
+    const exportXlsx = () => {
+        const isMonth = selected === 'month-subscription';
+        const headers = isMonth
+            ? [
+                  'Επώνυμο',
+                  'Όνομα',
+                  'Τμήμα',
+                  'Email πατρός',
+                  'Email μητρός',
+                  'Κατάσταση',
+                  'Χρέωση',
+                  'Πληρωμή',
+                  'Υπόλοιπο',
+                  'Τηλ. γονέα',
+              ]
+            : ['Επώνυμο', 'Όνομα', 'Άθλημα', 'Τμήμα'];
+        const rows = filtered.map((a) =>
+            isMonth
+                ? [
+                      a.last_name || '',
+                      a.first_name || '',
+                      a.class_names || '',
+                      a.father_email || '',
+                      a.mother_email || '',
+                      a.month_pay_status_label || '',
+                      a.month_charged ?? '',
+                      a.month_paid ?? '',
+                      a.month_remaining ?? '',
+                      a.guardian_phone || a.phone || '',
+                  ]
+                : [a.last_name || '', a.first_name || '', a.sport || '', a.class_names || ''],
+        );
+
+        downloadSimpleXlsx({
+            headers,
+            rows,
+            sheetName: current?.title || 'Εκτύπωση',
+            filename: `${current?.id || 'export'}.xlsx`,
         });
-        const blob = new Blob([[header, ...lines].join('\n')], {
-            type: 'text/csv;charset=utf-8',
-        });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${current.id}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
     };
 
     const openMonthSubscriptionResults = () => {
@@ -407,7 +414,7 @@ export default function Index({
                         <div className="flex flex-wrap gap-2">
                             <button
                                 type="button"
-                                onClick={exportCsv}
+                                onClick={exportXlsx}
                                 className="rounded-md border border-ts-border px-3 py-1.5 text-sm hover:bg-ts-hover"
                             >
                                 Εξαγωγή XLSX
@@ -473,7 +480,7 @@ export default function Index({
                         <div className="flex flex-wrap gap-2">
                             <button
                                 type="button"
-                                onClick={exportCsv}
+                                onClick={exportXlsx}
                                 className="rounded-md border border-ts-border px-3 py-1.5 text-sm hover:bg-ts-hover"
                             >
                                 Εξαγωγή XLSX
