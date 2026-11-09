@@ -31,7 +31,7 @@ class PlatformClubUserDirectoryTest extends TestCase
         ]);
 
         $clubAdmin = User::factory()->create([
-            'name' => 'Παπαδόπουλος Νίκος',
+            'name' => 'Νίκος Παπαδόπουλος',
             'email' => 'club-admin@example.com',
             'password' => 'secret-pass',
             'password_reveal' => UserPasswordVault::seal('secret-pass'),

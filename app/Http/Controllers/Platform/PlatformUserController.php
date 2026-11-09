@@ -385,7 +385,7 @@ class PlatformUserController extends Controller
             ->map(function (User $user) use ($labels) {
                 $pivot = $user->clubs->first()?->pivot;
                 $role = (string) ($pivot?->role ?? '');
-                $parts = PersonNameSplitter::split((string) $user->name);
+                $parts = PersonNameSplitter::splitGivenNameFirst((string) $user->name);
                 $email = (string) $user->email;
 
                 return [

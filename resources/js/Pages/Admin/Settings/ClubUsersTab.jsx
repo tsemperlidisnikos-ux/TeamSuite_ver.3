@@ -22,7 +22,11 @@ function splitFullName(value) {
     if (parts.length === 1) {
         return { lastName: parts[0], firstName: '' };
     }
-    return { lastName: parts[0], firstName: parts.slice(1).join(' ') };
+    // ΟΝΟΜΑ … ΕΠΩΝΥΜΟ — ίδια σύμβαση με PersonNameSplitter::splitGivenNameFirst
+    return {
+        firstName: parts.slice(0, -1).join(' '),
+        lastName: parts[parts.length - 1],
+    };
 }
 
 function roleLabel(roles, roleId) {
@@ -137,7 +141,7 @@ export default function ClubUsersTab({
 
     const submit = (e) => {
         e.preventDefault();
-        const fullName = [form.data.last_name, form.data.first_name]
+        const fullName = [form.data.first_name, form.data.last_name]
             .map((part) => String(part || '').trim())
             .filter(Boolean)
             .join(' ');
