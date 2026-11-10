@@ -197,6 +197,8 @@ Route::middleware(['auth', 'verified', 'club', 'club.module'])->group(function (
     Route::post('/admin/settings/public-registration', [SettingsController::class, 'updatePublicRegistration'])->name('admin.settings.public.update');
     Route::post('/admin/settings/terms', [SettingsController::class, 'updateTerms'])->name('admin.settings.terms.update');
     Route::post('/admin/settings/gdpr', [SettingsController::class, 'updateGdpr'])->name('admin.settings.gdpr.update');
+    Route::get('/admin/settings/gdpr/dsar/{athleteId}', [SettingsController::class, 'exportDsar'])->name('admin.settings.gdpr.dsar');
+    Route::post('/admin/settings/gdpr/retention', [SettingsController::class, 'runGdprRetention'])->name('admin.settings.gdpr.retention');
 
     Route::post('/admin/settings/users', [SettingsController::class, 'storeUser'])->name('admin.settings.users.store');
     Route::patch('/admin/settings/users/{id}', [SettingsController::class, 'updateUser'])->name('admin.settings.users.update');
@@ -274,6 +276,11 @@ Route::middleware(['auth', 'verified', 'club', 'club.module'])->group(function (
 Route::middleware(['auth', 'verified', 'platform'])->prefix('platform')->name('platform.')->group(function () {
     Route::get('/', PlatformDashboardController::class)->name('dashboard');
     Route::get('/backup/download', [PlatformBackupController::class, 'download'])->name('backup.download');
+    Route::post('/backup/schedule', [PlatformBackupController::class, 'updateSchedule'])->name('backup.schedule');
+    Route::post('/backup/run', [PlatformBackupController::class, 'runScheduled'])->name('backup.run');
+    Route::post('/backup/google-drive', [PlatformBackupController::class, 'updateGoogleDrive'])->name('backup.google-drive');
+    Route::get('/backup/google-drive/status', [PlatformBackupController::class, 'googleDriveStatus'])->name('backup.google-drive.status');
+    Route::get('/backup/diagnostics', [PlatformBackupController::class, 'diagnostics'])->name('backup.diagnostics');
     Route::post('/settings', [PlatformSettingsController::class, 'update'])->name('settings.update');
     Route::post('/hosting', [PlatformHostingController::class, 'update'])
         ->name('hosting.update');

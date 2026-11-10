@@ -100,6 +100,19 @@ final class Roles
         return in_array($clubRole, [self::ADMIN, self::DOCTOR], true);
     }
 
+    /**
+     * GDPR settings management (DPA, retention, DSAR, DPIA checklist).
+     * Doctors may view AMKA audit logs via canAccessAmka but not manage GDPR docs.
+     */
+    public static function canManageGdpr(bool $isPlatformAdmin, ?string $clubRole): bool
+    {
+        if ($isPlatformAdmin) {
+            return true;
+        }
+
+        return in_array($clubRole, [self::ADMIN, self::SECRETARIAT], true);
+    }
+
     public static function canManageClubUsers(bool $isPlatformAdmin, ?string $clubRole): bool
     {
         if ($isPlatformAdmin) {

@@ -30,6 +30,17 @@ final class ClubHome
             $club,
         );
 
+        $role = (string) $user->roleInClub($club);
+
+        // TeamSuite HomeRoute: coach/athlete land on their portal (not admin dashboard).
+        if ($role === Roles::COACH && in_array('dashboard', $modules, true)) {
+            return 'portal.coach';
+        }
+
+        if ($role === Roles::ATHLETE) {
+            return 'portal.athlete';
+        }
+
         if (in_array('dashboard', $modules, true)) {
             return 'dashboard';
         }
@@ -40,7 +51,7 @@ final class ClubHome
             return $first;
         }
 
-        if ((string) $user->roleInClub($club) === 'parent') {
+        if ($role === Roles::PARENT) {
             return 'portal.parent';
         }
 

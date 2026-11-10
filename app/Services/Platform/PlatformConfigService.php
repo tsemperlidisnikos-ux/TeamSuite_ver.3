@@ -44,6 +44,129 @@ class PlatformConfigService
                 'last_topup_at' => null,
                 'last_notified_at' => null,
             ],
+            'backupSchedules' => $this->defaultBackupSchedules(),
+            'googleDriveBackup' => $this->defaultGoogleDriveBackup(),
+        ];
+    }
+
+    /**
+     * @return array{enabled: bool, frequency: string, timeLocal: string, dayOfWeek: int, dayOfMonth: int, mode: string, lastRunAt: ?string}
+     */
+    public function defaultBackupScheduleRule(array $overrides = []): array
+    {
+        return array_merge([
+            'enabled' => false,
+            'frequency' => 'daily',
+            'timeLocal' => '02:00',
+            'dayOfWeek' => 1,
+            'dayOfMonth' => 1,
+            'mode' => 'download',
+            'lastRunAt' => null,
+        ], $overrides);
+    }
+
+    /**
+     * @return array{fullApp: array<string, mixed>, perClub: array<string, mixed>, clubIds: list<string>}
+     */
+    public function defaultBackupSchedules(): array
+    {
+        return [
+            'fullApp' => $this->defaultBackupScheduleRule(['mode' => 'download']),
+            'perClub' => $this->defaultBackupScheduleRule(['mode' => 'cloud', 'enabled' => true]),
+            'clubIds' => [],
+        ];
+    }
+
+    /**
+     * @return array{enabled: bool, connected: bool, rootFolderId: string, excludeClubIds: list<string>, lastUploadAt: ?string}
+     */
+    public function defaultGoogleDriveBackup(): array
+    {
+        return [
+            'enabled' => false,
+            'connected' => false,
+            'rootFolderId' => '',
+            'excludeClubIds' => [],
+            'lastUploadAt' => null,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $stored
+     * @return array{fullApp: array<string, mixed>, perClub: array<string, mixed>, clubIds: list<string>}
+     */
+    public function sanitizeBackupSchedules(?array $stored): array
+    {
+        $base = $this->defaultBackupSchedules();
+        if (! is_array($stored)) {
+            return $base;
+        }
+
+        foreach (['fullApp', 'perClub'] as $key) {
+            if (! is_array($stored[$key] ?? null)) {
+                continue;
+            }
+            $rule = $stored[$key];
+            $frequency = in_array($rule['frequency'] ?? '', ['daily', 'weekly', 'monthly'], true)
+                ? $rule['frequency']
+                : $base[$key]['frequency'];
+            $mode = in_array($rule['mode'] ?? '', ['download', 'cloud', 'both'], true)
+                ? $rule['mode']
+                : $base[$key]['mode'];
+            $base[$key] = [
+                'enabled' => (bool) ($rule['enabled'] ?? false),
+                'frequency' => $frequency,
+                'timeLocal' => is_string($rule['timeLocal'] ?? null) && preg_match('/^\d{2}:\d{2}$/', $rule['timeLocal'])
+                    ? $rule['timeLocal']
+                    : $base[$key]['timeLocal'],
+                'dayOfWeek' => max(0, min(6, (int) ($rule['dayOfWeek'] ?? $base[$key]['dayOfWeek']))),
+                'dayOfMonth' => max(1, min(28, (int) ($rule['dayOfMonth'] ?? $base[$key]['dayOfMonth']))),
+                'mode' => $mode,
+                'lastRunAt' => isset($rule['lastRunAt']) && is_string($rule['lastRunAt']) ? $rule['lastRunAt'] : null,
+            ];
+        }
+
+        $clubIds = [];
+        if (is_array($stored['clubIds'] ?? null)) {
+            foreach ($stored['clubIds'] as $id) {
+                if (is_string($id) && $id !== '') {
+                    $clubIds[] = $id;
+                }
+            }
+        }
+        $base['clubIds'] = array_values(array_unique($clubIds));
+
+        return $base;
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $stored
+     * @return array{enabled: bool, connected: bool, rootFolderId: string, excludeClubIds: list<string>, lastUploadAt: ?string}
+     */
+    public function sanitizeGoogleDriveBackup(?array $stored): array
+    {
+        $base = $this->defaultGoogleDriveBackup();
+        if (! is_array($stored)) {
+            return $base;
+        }
+
+        $exclude = [];
+        if (is_array($stored['excludeClubIds'] ?? null)) {
+            foreach ($stored['excludeClubIds'] as $id) {
+                if (is_string($id) && $id !== '') {
+                    $exclude[] = $id;
+                }
+            }
+        }
+
+        return [
+            'enabled' => (bool) ($stored['enabled'] ?? false),
+            'connected' => (bool) ($stored['connected'] ?? false),
+            'rootFolderId' => is_string($stored['rootFolderId'] ?? null) ? trim($stored['rootFolderId']) : '',
+            'excludeClubIds' => array_values(array_unique($exclude)),
+            'lastUploadAt' => isset($stored['lastUploadAt']) && is_string($stored['lastUploadAt'])
+                ? $stored['lastUploadAt']
+                : null,
         ];
     }
 
@@ -93,6 +216,13 @@ class PlatformConfigService
         $config['expenseDescriptions'] = $this->mergeDescriptionMaps(
             $this->defaultExpenseDescriptions(),
             is_array($config['expenseDescriptions'] ?? null) ? $config['expenseDescriptions'] : [],
+        );
+
+        $config['backupSchedules'] = $this->sanitizeBackupSchedules(
+            is_array($stored['backupSchedules'] ?? null) ? $stored['backupSchedules'] : null,
+        );
+        $config['googleDriveBackup'] = $this->sanitizeGoogleDriveBackup(
+            is_array($stored['googleDriveBackup'] ?? null) ? $stored['googleDriveBackup'] : null,
         );
 
         return $config;
@@ -157,6 +287,20 @@ class PlatformConfigService
                 }
             }
             $next['clubHeaderTitles'] = $titles;
+        }
+
+        if (array_key_exists('backupSchedules', $patch)) {
+            $next['backupSchedules'] = $this->sanitizeBackupSchedules(
+                is_array($patch['backupSchedules']) ? $patch['backupSchedules'] : null,
+            );
+        }
+
+        if (array_key_exists('googleDriveBackup', $patch)) {
+            $mergedDrive = array_replace(
+                is_array($current['googleDriveBackup'] ?? null) ? $current['googleDriveBackup'] : [],
+                is_array($patch['googleDriveBackup']) ? $patch['googleDriveBackup'] : [],
+            );
+            $next['googleDriveBackup'] = $this->sanitizeGoogleDriveBackup($mergedDrive);
         }
 
         PlatformSetting::query()->updateOrCreate(

@@ -190,6 +190,16 @@ const ITEM_ICONS = {
     licenses: 'calendar',
 };
 
+const defaultBackupRule = {
+    enabled: false,
+    frequency: 'daily',
+    timeLocal: '02:00',
+    dayOfWeek: 1,
+    dayOfMonth: 1,
+    mode: 'download',
+    lastRunAt: null,
+};
+
 export default function Dashboard({
     clubsCount,
     packagesCount,
@@ -200,6 +210,8 @@ export default function Dashboard({
     activePreview = null,
     hostingCost = null,
     loginHistory = [],
+    diagnosticCounts = null,
+    googleDriveOauthConfigured = false,
 }) {
     const page = usePage();
     const initial = initialNav(page.url);
@@ -212,8 +224,23 @@ export default function Dashboard({
     const [newExpenseCat, setNewExpenseCat] = useState('');
     const [descCategory, setDescCategory] = useState('');
     const [newDesc, setNewDesc] = useState('');
+    const [diagBusy, setDiagBusy] = useState(false);
+    const [diagLive, setDiagLive] = useState(diagnosticCounts);
 
     const form = useForm({ ...platformConfig });
+    const scheduleForm = useForm({
+        backupSchedules: platformConfig?.backupSchedules || {
+            fullApp: { ...defaultBackupRule },
+            perClub: { ...defaultBackupRule, enabled: true, mode: 'cloud' },
+            clubIds: [],
+        },
+    });
+    const driveForm = useForm({
+        enabled: !!platformConfig?.googleDriveBackup?.enabled,
+        connected: !!platformConfig?.googleDriveBackup?.connected,
+        rootFolderId: platformConfig?.googleDriveBackup?.rootFolderId || '',
+        excludeClubIds: platformConfig?.googleDriveBackup?.excludeClubIds || [],
+    });
     const hostingForm = useForm({
         monthly_estimate_eur: hostingCost?.monthly_estimate_eur ?? 7.5,
         prepaid_balance_eur: hostingCost?.prepaid_balance_eur ?? '',
@@ -237,8 +264,67 @@ export default function Dashboard({
 
     useEffect(() => {
         form.setData({ ...platformConfig });
+        scheduleForm.setData({
+            backupSchedules: platformConfig?.backupSchedules || scheduleForm.data.backupSchedules,
+        });
+        driveForm.setData({
+            enabled: !!platformConfig?.googleDriveBackup?.enabled,
+            connected: !!platformConfig?.googleDriveBackup?.connected,
+            rootFolderId: platformConfig?.googleDriveBackup?.rootFolderId || '',
+            excludeClubIds: platformConfig?.googleDriveBackup?.excludeClubIds || [],
+        });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [platformConfig]);
+
+    useEffect(() => {
+        setDiagLive(diagnosticCounts);
+    }, [diagnosticCounts]);
+
+    const patchScheduleRule = (key, patch) => {
+        const current = scheduleForm.data.backupSchedules || {};
+        scheduleForm.setData('backupSchedules', {
+            ...current,
+            [key]: { ...(current[key] || defaultBackupRule), ...patch },
+        });
+    };
+
+    const saveSchedule = () => {
+        scheduleForm.post(route('platform.backup.schedule'), { preserveScroll: true });
+    };
+
+    const runBackupNow = () => {
+        router.post(route('platform.backup.run'), {}, { preserveScroll: true });
+    };
+
+    const saveDrive = (patch = {}) => {
+        const payload = { ...driveForm.data, ...patch };
+        driveForm.transform(() => payload);
+        driveForm.post(route('platform.backup.google-drive'), {
+            preserveScroll: true,
+            onFinish: () => driveForm.transform((data) => data),
+        });
+    };
+
+    const refreshDiagnostics = async () => {
+        setDiagBusy(true);
+        try {
+            const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+            const res = await fetch(route('platform.backup.diagnostics'), {
+                headers: {
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': csrf || '',
+                },
+                credentials: 'same-origin',
+            });
+            const json = await res.json();
+            if (res.ok && json?.counts) {
+                setDiagLive(json.counts);
+            }
+        } finally {
+            setDiagBusy(false);
+        }
+    };
 
     const categories = NAV[tab]?.categories || [];
     const activeCategory = categories.find((c) => c.id === categoryId) || categories[0];
@@ -1004,28 +1090,218 @@ export default function Dashboard({
                         )}
                         {activeItem?.id === 'gdrive' && (
                             <Panel>
-                                <p className="text-sm text-ts-muted">
-                                    Η σύνδεση Google Drive για αυτόματα αντίγραφα θα ενεργοποιηθεί σε
-                                    επόμενη έκδοση.
+                                <p className="mb-3 text-sm text-ts-muted">
+                                    Ρυθμίσεις στόχου Google Drive για νυχτερινά αντίγραφα συλλόγων.
+                                    Η πλήρης OAuth σύνδεση ενεργοποιείται όταν οριστούν{' '}
+                                    <code className="text-ts-fg-soft">GOOGLE_DRIVE_CLIENT_ID</code> /{' '}
+                                    <code className="text-ts-fg-soft">GOOGLE_DRIVE_CLIENT_SECRET</code>.
                                 </p>
+                                {!googleDriveOauthConfigured ? (
+                                    <p className="mb-3 text-sm text-amber-800">
+                                        Δεν έχουν οριστεί τα Google OAuth secrets στο περιβάλλον. Μπορείτε
+                                        να αποθηκεύσετε φάκελο και προτιμήσεις· η σύνδεση δεν μπορεί να
+                                        ξεκινήσει ακόμα.
+                                    </p>
+                                ) : null}
+                                <div className="space-y-3">
+                                    <label className="flex items-center gap-2 text-sm text-ts-fg-soft">
+                                        <input
+                                            type="checkbox"
+                                            checked={!!driveForm.data.enabled}
+                                            onChange={(e) =>
+                                                driveForm.setData('enabled', e.target.checked)
+                                            }
+                                        />
+                                        Ενεργό ανέβασμα στο Drive
+                                    </label>
+                                    <label className="flex items-center gap-2 text-sm text-ts-fg-soft">
+                                        <input
+                                            type="checkbox"
+                                            checked={!!driveForm.data.connected}
+                                            onChange={(e) =>
+                                                driveForm.setData('connected', e.target.checked)
+                                            }
+                                        />
+                                        Σημείωση σύνδεσης (χειροκίνητη / stub μέχρι OAuth)
+                                    </label>
+                                    <label className="block text-sm text-ts-fg-soft">
+                                        Root folder ID
+                                        <input
+                                            className={`${field} mt-1`}
+                                            value={driveForm.data.rootFolderId || ''}
+                                            onChange={(e) =>
+                                                driveForm.setData('rootFolderId', e.target.value)
+                                            }
+                                            placeholder="TeamSuite-Backups folder id"
+                                        />
+                                    </label>
+                                    <div className="flex flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            className={btn}
+                                            disabled={driveForm.processing}
+                                            onClick={() => saveDrive()}
+                                        >
+                                            Αποθήκευση Drive
+                                        </button>
+                                    </div>
+                                    {platformConfig?.googleDriveBackup?.lastUploadAt ? (
+                                        <p className="text-xs text-ts-muted">
+                                            Τελευταία αποστολή:{' '}
+                                            {platformConfig.googleDriveBackup.lastUploadAt}
+                                        </p>
+                                    ) : null}
+                                </div>
                             </Panel>
                         )}
                         {activeItem?.id === 'schedule' && (
                             <Panel>
-                                <p className="text-sm text-ts-muted">
-                                    Ο χρονοπρογραμματισμός backup (ημερήσιο / εβδομαδιαίο) θα
-                                    διαμορφωθεί μαζί με το cloud sync.
+                                <p className="mb-3 text-sm text-ts-muted">
+                                    Ορίστε πότε γίνεται full backup εφαρμογής και ανά σύλλογο. Το
+                                    υπάρχον cron εκτελεί{' '}
+                                    <code className="text-ts-fg-soft">ClubBackupJob</code> στις 02:00.
                                 </p>
+                                {['fullApp', 'perClub'].map((key) => {
+                                    const rule =
+                                        scheduleForm.data.backupSchedules?.[key] || defaultBackupRule;
+                                    const title =
+                                        key === 'fullApp' ? 'Full app backup' : 'Backup ανά σύλλογο';
+                                    return (
+                                        <div
+                                            key={key}
+                                            className="mb-4 rounded-lg border border-ts-border bg-ts-surface-2 p-3"
+                                        >
+                                            <h4 className="text-sm font-semibold text-ts-fg">{title}</h4>
+                                            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                                                <label className="flex items-center gap-2 text-sm">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={!!rule.enabled}
+                                                        onChange={(e) =>
+                                                            patchScheduleRule(key, {
+                                                                enabled: e.target.checked,
+                                                            })
+                                                        }
+                                                    />
+                                                    Ενεργό
+                                                </label>
+                                                <label className="block text-sm">
+                                                    Συχνότητα
+                                                    <select
+                                                        className={`${field} mt-1`}
+                                                        value={rule.frequency || 'daily'}
+                                                        onChange={(e) =>
+                                                            patchScheduleRule(key, {
+                                                                frequency: e.target.value,
+                                                            })
+                                                        }
+                                                    >
+                                                        <option value="daily">Καθημερινά</option>
+                                                        <option value="weekly">Εβδομαδιαία</option>
+                                                        <option value="monthly">Μηνιαία</option>
+                                                    </select>
+                                                </label>
+                                                <label className="block text-sm">
+                                                    Ώρα
+                                                    <input
+                                                        type="time"
+                                                        className={`${field} mt-1`}
+                                                        value={rule.timeLocal || '02:00'}
+                                                        onChange={(e) =>
+                                                            patchScheduleRule(key, {
+                                                                timeLocal: e.target.value || '02:00',
+                                                            })
+                                                        }
+                                                    />
+                                                </label>
+                                                <label className="block text-sm">
+                                                    Τρόπος
+                                                    <select
+                                                        className={`${field} mt-1`}
+                                                        value={rule.mode || 'download'}
+                                                        onChange={(e) =>
+                                                            patchScheduleRule(key, {
+                                                                mode: e.target.value,
+                                                            })
+                                                        }
+                                                    >
+                                                        <option value="download">Λήψη JSON</option>
+                                                        <option value="cloud">Cloud / δίσκος</option>
+                                                        <option value="both">Και τα δύο</option>
+                                                    </select>
+                                                </label>
+                                            </div>
+                                            {rule.lastRunAt ? (
+                                                <p className="mt-2 text-xs text-ts-muted">
+                                                    Τελευταία εκτέλεση: {rule.lastRunAt}
+                                                </p>
+                                            ) : null}
+                                        </div>
+                                    );
+                                })}
+                                <div className="flex flex-wrap gap-2">
+                                    <button
+                                        type="button"
+                                        className={btn}
+                                        disabled={scheduleForm.processing}
+                                        onClick={saveSchedule}
+                                    >
+                                        Αποθήκευση προγράμματος
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="rounded-lg border border-ts-border bg-ts-surface px-4 py-2 text-sm font-medium text-ts-fg-soft hover:bg-ts-hover"
+                                        onClick={runBackupNow}
+                                    >
+                                        Εκτέλεση τώρα (ουρά)
+                                    </button>
+                                </div>
                             </Panel>
                         )}
                         {activeItem?.id === 'diagnostic' && (
                             <Panel>
-                                <ul className="space-y-1 text-sm text-ts-fg-soft">
-                                    <li>Σύλλογοι: {clubsCount}</li>
-                                    <li>Πακέτα αδειών: {packagesCount}</li>
-                                    <li>Waitlist: {waitlistCount}</li>
-                                    <li>Modules καταλόγου: {(catalogs?.academyModules || []).length}</li>
-                                    <li>Ενεργές καρτέλες οικονομικών: {(form.data.financeTabs || []).length}</li>
+                                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                                    <p className="text-sm text-ts-muted">
+                                        Γρήγοροι μετρητές συνοχής πλατφόρμας (σύλλογοι, χρήστες,
+                                        αθλητές, backups).
+                                    </p>
+                                    <button
+                                        type="button"
+                                        className={btn}
+                                        disabled={diagBusy}
+                                        onClick={() => void refreshDiagnostics()}
+                                    >
+                                        {diagBusy ? 'Έλεγχος…' : 'Ανανέωση ελέγχου'}
+                                    </button>
+                                </div>
+                                <ul className="grid gap-2 sm:grid-cols-2 text-sm text-ts-fg-soft">
+                                    {Object.entries(diagLive || {}).map(([key, value]) => (
+                                        <li
+                                            key={key}
+                                            className="flex justify-between rounded bg-ts-surface-2 px-2 py-1"
+                                        >
+                                            <span>{key}</span>
+                                            <span className="text-sky-700">{value}</span>
+                                        </li>
+                                    ))}
+                                    <li className="flex justify-between rounded bg-ts-surface-2 px-2 py-1">
+                                        <span>packages</span>
+                                        <span className="text-sky-700">{packagesCount}</span>
+                                    </li>
+                                    <li className="flex justify-between rounded bg-ts-surface-2 px-2 py-1">
+                                        <span>waitlist</span>
+                                        <span className="text-sky-700">{waitlistCount}</span>
+                                    </li>
+                                    <li className="flex justify-between rounded bg-ts-surface-2 px-2 py-1">
+                                        <span>clubs (dashboard)</span>
+                                        <span className="text-sky-700">{clubsCount}</span>
+                                    </li>
+                                    <li className="flex justify-between rounded bg-ts-surface-2 px-2 py-1">
+                                        <span>modules</span>
+                                        <span className="text-sky-700">
+                                            {(catalogs?.academyModules || []).length}
+                                        </span>
+                                    </li>
                                 </ul>
                             </Panel>
                         )}

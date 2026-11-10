@@ -14,7 +14,6 @@ use App\Models\AthleteTransaction;
 use App\Models\Attendance;
 use App\Models\ClothingPackage;
 use App\Models\Club;
-use App\Models\Coach;
 use App\Models\ProgressReport;
 use App\Models\RegistrationApplication;
 use App\Models\Scopes\ClubScope;
@@ -25,6 +24,7 @@ use App\Services\Athletes\AthleteCsvService;
 use App\Services\Audit\ClubActivityLogger;
 use App\Services\Gdpr\AmkaService;
 use App\Support\ClothingPackageIds;
+use App\Support\CoachClassScope;
 use App\Support\GreekGivenName;
 use App\Support\PreferredNotifyEmail;
 use App\Support\Roles;
@@ -207,6 +207,8 @@ class AthleteController extends Controller
             $classesQuery->whereIn('id', $allowedClassIds ?: ['']);
         }
 
+        $licenseUsage = $this->licenseUsageForClub($club);
+
         return Inertia::render('Admin/Athletes/Index', [
             'rows' => $rows,
             'filters' => [
@@ -221,6 +223,7 @@ class AthleteController extends Controller
                 'trial' => $this->clubQuery(Athlete::class, $request)->where('status', 'trial')->count(),
                 'inactive' => $this->clubQuery(Athlete::class, $request)->where('status', 'inactive')->count(),
             ],
+            'license_usage' => $licenseUsage,
             'healthNoticeRows' => $isDoctor ? [] : $healthNoticeRows,
             'pendingApplications' => $isDoctor ? [] : $pendingApplications,
             'capabilities' => [
@@ -880,17 +883,65 @@ class AthleteController extends Controller
             'file' => 'required|file|mimes:csv,txt,text/csv|max:5120',
         ]);
 
+        $club = $request->attributes->get('currentClub') ?? $request->user()?->activeClub;
+        $usage = $this->licenseUsageForClub($club instanceof Club ? $club : null);
+        if (($usage['full'] ?? false) === true) {
+            return redirect()
+                ->route('admin.athletes.index')
+                ->with(
+                    'error',
+                    'Το όριο αδειών αθλητών έχει συμπληρωθεί ('
+                    .($usage['active'] ?? 0).'/'.($usage['cap'] ?? '—')
+                    .'). Απελευθερώστε θέσεις ή αναβαθμίστε την άδεια πριν την εισαγωγή.'
+                );
+        }
+
         $result = $csv->import($this->clubId($request), $request->file('file'));
 
         $msg = "Εισαγωγή: {$result['created']} νέοι, {$result['updated']} ενημερώσεις";
         if ($result['skipped'] > 0) {
             $msg .= ", {$result['skipped']} παραλείψεις";
         }
+        if (($usage['remaining'] ?? null) !== null && ($result['created'] ?? 0) > ($usage['remaining'] ?? 0)) {
+            $msg .= '. Προσοχή: μπορεί να υπερβείτε το όριο αδειών.';
+        }
 
         return redirect()
             ->route('admin.athletes.index')
             ->with('success', $msg)
             ->with('import_errors', array_slice($result['errors'], 0, 20));
+    }
+
+    /**
+     * @return array{active: int, cap: ?int, percent: ?int, remaining: ?int, full: bool}
+     */
+    private function licenseUsageForClub(?Club $club): array
+    {
+        if (! $club) {
+            return [
+                'active' => 0,
+                'cap' => null,
+                'percent' => null,
+                'remaining' => null,
+                'full' => false,
+            ];
+        }
+
+        $club->loadMissing('licensePackage');
+        $active = Athlete::query()->withoutGlobalScopes()
+            ->where('club_id', $club->id)
+            ->where('status', '!=', 'inactive')
+            ->count();
+        $cap = (int) ($club->licensePackage?->athlete_cap ?? 0);
+        $hasCap = $cap > 0;
+
+        return [
+            'active' => $active,
+            'cap' => $hasCap ? $cap : null,
+            'percent' => $hasCap ? min(100, (int) round(($active / $cap) * 100)) : null,
+            'remaining' => $hasCap ? max(0, $cap - $active) : null,
+            'full' => $hasCap && $active >= $cap,
+        ];
     }
 
     private function resolveNotifyEmail(Athlete $athlete): ?string
@@ -944,33 +995,7 @@ class AthleteController extends Controller
      */
     private function coachClassIds(Request $request): ?array
     {
-        $user = $request->user();
-        $club = $request->attributes->get('currentClub') ?? $user?->activeClub;
-        if (! $user || ! $club || $user->is_platform_admin) {
-            return null;
-        }
-        if ($user->roleInClub($club) !== Roles::COACH) {
-            return null;
-        }
-
-        $coach = Coach::query()->withoutGlobalScopes()
-            ->where('club_id', $club->id)
-            ->where(function ($q) use ($user) {
-                $q->where('user_id', $user->id)->orWhere('email', $user->email);
-            })
-            ->where('is_active', true)
-            ->first();
-
-        if (! $coach) {
-            return [];
-        }
-
-        return AcademyClass::query()->withoutGlobalScopes()
-            ->where('club_id', $club->id)
-            ->where('coach_id', $coach->id)
-            ->pluck('id')
-            ->map(fn ($id) => (string) $id)
-            ->all();
+        return CoachClassScope::classIdsForRequest($request);
     }
 
     private function registrationFormImageUrl(RegistrationApplication $app): ?string

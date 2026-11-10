@@ -52,6 +52,7 @@ class BackupRestoreController extends Controller
             'lastDryRun' => $request->session()->get('backup_dry_run'),
             'verify' => $verify,
             'currentCounts' => $clubId ? $this->clubCounts($clubId) : null,
+            'canQuickClubBackup' => $this->userCanQuickClubBackup($request),
         ]);
     }
 
@@ -60,16 +61,7 @@ class BackupRestoreController extends Controller
      */
     public function download(Request $request, TeamSuiteClubExporter $exporter): StreamedResponse
     {
-        $user = $request->user();
-        $club = $request->attributes->get('currentClub') ?? $user?->activeClub;
-        abort_unless(
-            Roles::canQuickClubBackup(
-                (bool) $user?->is_platform_admin,
-                $user?->roleInClub($club),
-            ),
-            403,
-            'Μόνο διαχειριστής πλατφόρμας, διαχειριστής συλλόγου ή γραμματεία μπορούν να κατεβάσουν backup.',
-        );
+        $this->assertCanQuickClubBackup($request);
 
         $clubId = $this->clubId($request);
         $club = Club::query()->findOrFail($clubId);
@@ -85,6 +77,7 @@ class BackupRestoreController extends Controller
 
     public function preview(Request $request, TeamSuiteBackupRestoreService $restore): RedirectResponse
     {
+        $this->assertCanQuickClubBackup($request);
         $restore->prepareLongRunningRestore();
 
         $request->validate([
@@ -119,6 +112,7 @@ class BackupRestoreController extends Controller
 
     public function restore(Request $request, TeamSuiteBackupRestoreService $restore): RedirectResponse
     {
+        $this->assertCanQuickClubBackup($request);
         $restore->prepareLongRunningRestore();
 
         $data = $request->validate([
@@ -199,5 +193,25 @@ class BackupRestoreController extends Controller
             'sports' => Sport::query()->withoutGlobalScopes()->where('club_id', $clubId)->count(),
             'facilities' => Facility::query()->withoutGlobalScopes()->where('club_id', $clubId)->count(),
         ];
+    }
+
+    private function userCanQuickClubBackup(Request $request): bool
+    {
+        $user = $request->user();
+        $club = $request->attributes->get('currentClub') ?? $user?->activeClub;
+
+        return Roles::canQuickClubBackup(
+            (bool) $user?->is_platform_admin,
+            $user?->roleInClub($club),
+        );
+    }
+
+    private function assertCanQuickClubBackup(Request $request): void
+    {
+        abort_unless(
+            $this->userCanQuickClubBackup($request),
+            403,
+            'Μόνο διαχειριστής πλατφόρμας, διαχειριστής συλλόγου ή γραμματεία μπορούν να διαχειριστούν backup.',
+        );
     }
 }

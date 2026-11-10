@@ -11,6 +11,7 @@ use App\Models\Coach;
 use App\Models\Facility;
 use App\Models\Scopes\ClubScope;
 use App\Models\Training;
+use App\Support\CoachClassScope;
 use App\Support\Roles;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -170,17 +171,11 @@ class CoachPortalController extends Controller
 
     private function resolveCoach($user, ?string $clubId): ?Coach
     {
-        if (! $clubId) {
+        if (! $user || ! $clubId) {
             return null;
         }
 
-        return Coach::query()->withoutGlobalScopes()
-            ->where('club_id', $clubId)
-            ->where(function ($q) use ($user) {
-                $q->where('user_id', $user->id)->orWhere('email', $user->email);
-            })
-            ->where('is_active', true)
-            ->first();
+        return CoachClassScope::resolveCoach($user, $clubId);
     }
 
     private function resolveDate(mixed $raw, string $fallback): string

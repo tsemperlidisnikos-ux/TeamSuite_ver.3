@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AcademyClass;
 use App\Models\Athlete;
 use App\Models\Attendance;
+use App\Support\CoachClassScope;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -23,11 +24,23 @@ class AttendanceController extends Controller
         $date = $request->query('date', now()->toDateString());
         $classId = (string) $request->query('class_id', '');
         $sport = trim((string) $request->query('sport', ''));
+        $allowedClassIds = CoachClassScope::classIdsForRequest($request);
 
         $classes = $this->clubQuery(AcademyClass::class, $request)
+            ->when($allowedClassIds !== null, function ($q) use ($allowedClassIds) {
+                if ($allowedClassIds === []) {
+                    $q->whereRaw('1 = 0');
+                } else {
+                    $q->whereIn('id', $allowedClassIds);
+                }
+            })
             ->when($sport !== '', fn ($q) => $q->where('sport', 'like', '%'.$sport.'%'))
             ->orderBy('name')
             ->get(['id', 'name', 'sport']);
+
+        if ($classId !== '' && ! CoachClassScope::allowsClass($allowedClassIds, $classId)) {
+            $classId = '';
+        }
 
         if ($classId === '' && $classes->isNotEmpty()) {
             $classId = (string) $classes->first()->id;
@@ -74,6 +87,13 @@ class AttendanceController extends Controller
         }
 
         $sports = $this->clubQuery(AcademyClass::class, $request)
+            ->when($allowedClassIds !== null, function ($q) use ($allowedClassIds) {
+                if ($allowedClassIds === []) {
+                    $q->whereRaw('1 = 0');
+                } else {
+                    $q->whereIn('id', $allowedClassIds);
+                }
+            })
             ->whereNotNull('sport')
             ->where('sport', '!=', '')
             ->distinct()
@@ -143,6 +163,7 @@ class AttendanceController extends Controller
         ]);
 
         $clubId = $this->clubId($request);
+        $this->assertCoachCanAccessClass($request, $data['class_id']);
 
         $this->clubQuery(AcademyClass::class, $request)->whereKey($data['class_id'])->firstOrFail();
         Athlete::query()->withoutGlobalScopes()
@@ -198,6 +219,7 @@ class AttendanceController extends Controller
         ]);
 
         $clubId = $this->clubId($request);
+        $this->assertCoachCanAccessClass($request, $data['class_id']);
         $this->clubQuery(AcademyClass::class, $request)->whereKey($data['class_id'])->firstOrFail();
 
         $athleteIds = Athlete::query()->withoutGlobalScopes()
@@ -233,5 +255,15 @@ class AttendanceController extends Controller
         }
 
         return back()->with('success', 'Οι παρουσίες ενημερώθηκαν.');
+    }
+
+    private function assertCoachCanAccessClass(Request $request, string $classId): void
+    {
+        $allowedClassIds = CoachClassScope::classIdsForRequest($request);
+        abort_unless(
+            CoachClassScope::allowsClass($allowedClassIds, $classId),
+            403,
+            'Δεν έχετε πρόσβαση σε αυτό το τμήμα.',
+        );
     }
 }

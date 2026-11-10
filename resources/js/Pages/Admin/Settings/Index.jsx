@@ -47,6 +47,11 @@ export default function Index({
     settings,
     users,
     canManageUsers = false,
+    canAccessAmka = false,
+    canManageGdpr = false,
+    amkaAccessLogs = [],
+    gdprAthletes = [],
+    dpiaChecklistItems = [],
     roles,
     permissionModules,
     roleDefaultPermissions,
@@ -66,6 +71,7 @@ export default function Index({
     const primaryTabs = PRIMARY_TABS.filter((t) =>
         t.id === 'users' ? canManageUsers : true,
     );
+    const moreTabs = MORE_TABS.filter((t) => (t.id === 'amka' ? canAccessAmka : true));
 
     const setTab = (id) => {
         if (id === 'backup') {
@@ -197,7 +203,10 @@ export default function Index({
         retention_policy_html: settings?.retention_policy_html || '',
         data_retention_months: settings?.data_retention_months || 24,
         accept_dpa: false,
+        dpia_checklist: settings?.dpia_checklist || {},
     });
+    const [dsarAthleteId, setDsarAthleteId] = useState('');
+    const [qrMessage, setQrMessage] = useState('');
 
     const sportForm = useForm({ name: '' });
     const facilityForm = useForm({ name: '', address: '', is_rentable: false });
@@ -225,6 +234,46 @@ export default function Index({
         if (typeof window === 'undefined') return `/join/${slug}`;
         return `${window.location.origin}/join/${slug}`;
     }, [publicForm.data.slug, club?.slug]);
+
+    const joinQrUrl = useMemo(
+        () =>
+            `https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=10&data=${encodeURIComponent(joinUrl)}`,
+        [joinUrl],
+    );
+
+    const downloadJoinQr = async () => {
+        try {
+            const response = await fetch(joinQrUrl);
+            if (!response.ok) throw new Error('QR fetch failed');
+            const blob = await response.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            const slug = (publicForm.data.slug || club?.slug || 'club').replace(/[^a-z0-9-]/gi, '-');
+            anchor.href = objectUrl;
+            anchor.download = `join-${slug}-qr.png`;
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            URL.revokeObjectURL(objectUrl);
+            setQrMessage('Το QR κατέβηκε.');
+        } catch {
+            window.open(joinQrUrl, '_blank', 'noopener,noreferrer');
+            setQrMessage('Άνοιξε το QR σε νέα καρτέλα — αποθήκευσέ το από εκεί.');
+        }
+    };
+
+    const actionLabel = (action) => {
+        const map = {
+            'amka.read': 'Προβολή',
+            'amka.write': 'Επεξεργασία',
+            view: 'Προβολή',
+            edit: 'Επεξεργασία',
+            delete: 'Διαγραφή',
+            consent: 'Συγκατάθεση',
+            seal: 'Σφράγιση',
+        };
+        return map[action] || action || '—';
+    };
 
     return (
         <AdminLayout title="Ρυθμίσεις">
@@ -278,7 +327,7 @@ export default function Index({
             >
                 <summary className="cursor-pointer text-sm text-ts-fg-soft">Για προχωρημένους</summary>
                 <div className="mt-2 flex flex-wrap gap-1">
-                    {MORE_TABS.map((t) => (
+                    {moreTabs.map((t) => (
                         <button
                             key={t.id}
                             type="button"
@@ -822,6 +871,45 @@ export default function Index({
                                 placeholder="π.χ. demo-club"
                             />
                             <p className="mt-1 break-all text-xs text-ts-muted">{joinUrl}</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    className="rounded-md border border-ts-border px-3 py-1.5 text-sm text-ts-fg-soft hover:bg-ts-hover"
+                                    onClick={() => {
+                                        void navigator.clipboard.writeText(joinUrl).then(
+                                            () => setQrMessage('Ο σύνδεσμος αντιγράφηκε.'),
+                                            () => setQrMessage('Αδυναμία αντιγραφής συνδέσμου.'),
+                                        );
+                                    }}
+                                >
+                                    Αντιγραφή συνδέσμου
+                                </button>
+                            </div>
+                        </SettingsFormRow>
+
+                        <SettingsFormRow label="QR δημόσιας εγγραφής">
+                            <div className="flex flex-wrap items-start gap-4">
+                                <img
+                                    src={joinQrUrl}
+                                    alt={`QR εγγραφής ${club?.name || ''}`}
+                                    className="h-40 w-40 rounded-md border border-ts-border bg-white p-2"
+                                />
+                                <div className="space-y-2">
+                                    <PublicRegInfo>
+                                        Σάρωσε το QR για άνοιγμα της δημόσιας φόρμας εγγραφής.
+                                    </PublicRegInfo>
+                                    <button
+                                        type="button"
+                                        className={btnPrimary}
+                                        onClick={() => void downloadJoinQr()}
+                                    >
+                                        Λήψη QR
+                                    </button>
+                                    {qrMessage ? (
+                                        <p className="text-xs text-emerald-800">{qrMessage}</p>
+                                    ) : null}
+                                </div>
+                            </div>
                         </SettingsFormRow>
 
                         <SettingsFormRow label="Email ειδοποίησης">
@@ -1250,63 +1338,234 @@ export default function Index({
             )}
 
             {tab === 'amka' && (
-                <form
-                    className={`max-w-2xl space-y-4`}
-                    onSubmit={(e) => {
-                        e.preventDefault();
-                        gdprForm.post(route('admin.settings.gdpr.update'));
-                    }}
-                >
-                    <div className={card}>
-                        <h2 className="text-base font-semibold text-ts-fg">GDPR / DPA</h2>
-                        {settings?.dpa_accepted_at ? (
-                            <p className="text-sm text-emerald-800">
-                                DPA αποδεκτή: {new Date(settings.dpa_accepted_at).toLocaleString('el-GR')}
+                <div className="max-w-3xl space-y-4">
+                    {!canAccessAmka ? (
+                        <div className={card}>
+                            <p className="text-sm text-rose-700">
+                                Η ενότητα ΑΜΚΑ / GDPR είναι διαθέσιμη μόνο σε διαχειριστή, γραμματεία και
+                                ιατρό.
                             </p>
-                        ) : (
-                            <label className="flex items-center gap-2 text-sm text-amber-200">
-                                <input
-                                    type="checkbox"
-                                    checked={gdprForm.data.accept_dpa}
-                                    onChange={(e) => gdprForm.setData('accept_dpa', e.target.checked)}
-                                />
-                                Αποδέχομαι τη συμφωνία επεξεργασίας δεδομένων (DPA)
-                            </label>
-                        )}
-                        <label className="block text-xs text-ts-muted">
-                            Μήνες διατήρησης
-                            <input
-                                type="number"
-                                min={1}
-                                max={120}
-                                className={`mt-1 ${field}`}
-                                value={gdprForm.data.data_retention_months}
-                                onChange={(e) =>
-                                    gdprForm.setData('data_retention_months', Number(e.target.value))
-                                }
-                            />
-                        </label>
-                    </div>
-                    <div className={card}>
-                        <h3 className="text-sm font-medium text-ts-fg">Κείμενο DPA (HTML)</h3>
-                        <textarea
-                            className={`${field} min-h-40 font-mono text-xs`}
-                            value={gdprForm.data.dpa_html}
-                            onChange={(e) => gdprForm.setData('dpa_html', e.target.value)}
-                        />
-                    </div>
-                    <div className={card}>
-                        <h3 className="text-sm font-medium text-ts-fg">Πολιτική διατήρησης (HTML)</h3>
-                        <textarea
-                            className={`${field} min-h-40 font-mono text-xs`}
-                            value={gdprForm.data.retention_policy_html}
-                            onChange={(e) => gdprForm.setData('retention_policy_html', e.target.value)}
-                        />
-                    </div>
-                    <button type="submit" className={btnPrimary}>
-                        Αποθήκευση GDPR
-                    </button>
-                </form>
+                        </div>
+                    ) : (
+                        <>
+                            <div className={card}>
+                                <h2 className="text-base font-semibold text-ts-fg">Συμμόρφωση GDPR</h2>
+                                <p className="text-sm text-ts-muted">
+                                    DPA, διατήρηση δεδομένων, DPIA checklist και audit logs ΑΜΚΑ.
+                                </p>
+                                <p className="text-xs text-ts-muted">
+                                    Τα ιατρικά στοιχεία είναι ορατά μόνο σε διαχειριστή συλλόγου και ιατρό.
+                                </p>
+                            </div>
+
+                            {canManageGdpr ? (
+                                <>
+                                    <div className={card}>
+                                        <h3 className="text-sm font-semibold text-ts-fg">
+                                            Δικαιώματα υποκειμένου (DSAR)
+                                        </h3>
+                                        <label className="block text-xs text-ts-muted">
+                                            Αθλητής
+                                            <select
+                                                className={`mt-1 ${field}`}
+                                                value={dsarAthleteId}
+                                                onChange={(e) => setDsarAthleteId(e.target.value)}
+                                            >
+                                                <option value="">— Επιλογή —</option>
+                                                {gdprAthletes.map((a) => (
+                                                    <option key={a.id} value={a.id}>
+                                                        {a.last_name} {a.first_name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </label>
+                                        <div className="flex flex-wrap gap-2 pt-2">
+                                            <a
+                                                className={`${btnPrimary} ${!dsarAthleteId ? 'pointer-events-none opacity-50' : ''}`}
+                                                href={
+                                                    dsarAthleteId
+                                                        ? route('admin.settings.gdpr.dsar', dsarAthleteId)
+                                                        : '#'
+                                                }
+                                            >
+                                                Εξαγωγή JSON
+                                            </a>
+                                            <button
+                                                type="button"
+                                                className="rounded-md border border-ts-border px-3 py-1.5 text-sm"
+                                                onClick={() => {
+                                                    if (
+                                                        confirm(
+                                                            'Καθαρισμός παλαιών AMKA/GDPR logs (retention job);',
+                                                        )
+                                                    ) {
+                                                        router.post(route('admin.settings.gdpr.retention'));
+                                                    }
+                                                }}
+                                            >
+                                                Εκτέλεση retention
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <form
+                                        className="space-y-4"
+                                        onSubmit={(e) => {
+                                            e.preventDefault();
+                                            gdprForm.post(route('admin.settings.gdpr.update'));
+                                        }}
+                                    >
+                                        <div className={card}>
+                                            <h2 className="text-base font-semibold text-ts-fg">GDPR / DPA</h2>
+                                            {settings?.dpa_accepted_at ? (
+                                                <p className="text-sm text-emerald-800">
+                                                    DPA αποδεκτή:{' '}
+                                                    {new Date(settings.dpa_accepted_at).toLocaleString(
+                                                        'el-GR',
+                                                    )}
+                                                </p>
+                                            ) : (
+                                                <label className="flex items-center gap-2 text-sm text-amber-800">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={gdprForm.data.accept_dpa}
+                                                        onChange={(e) =>
+                                                            gdprForm.setData('accept_dpa', e.target.checked)
+                                                        }
+                                                    />
+                                                    Αποδέχομαι τη συμφωνία επεξεργασίας δεδομένων (DPA)
+                                                </label>
+                                            )}
+                                            <label className="block text-xs text-ts-muted">
+                                                Μήνες διατήρησης
+                                                <input
+                                                    type="number"
+                                                    min={1}
+                                                    max={120}
+                                                    className={`mt-1 ${field}`}
+                                                    value={gdprForm.data.data_retention_months}
+                                                    onChange={(e) =>
+                                                        gdprForm.setData(
+                                                            'data_retention_months',
+                                                            Number(e.target.value),
+                                                        )
+                                                    }
+                                                />
+                                            </label>
+                                        </div>
+                                        <div className={card}>
+                                            <h3 className="text-sm font-medium text-ts-fg">
+                                                Κείμενο DPA (HTML)
+                                            </h3>
+                                            <textarea
+                                                className={`${field} min-h-40 font-mono text-xs`}
+                                                value={gdprForm.data.dpa_html}
+                                                onChange={(e) =>
+                                                    gdprForm.setData('dpa_html', e.target.value)
+                                                }
+                                            />
+                                        </div>
+                                        <div className={card}>
+                                            <h3 className="text-sm font-medium text-ts-fg">
+                                                Πολιτική διατήρησης (HTML)
+                                            </h3>
+                                            <textarea
+                                                className={`${field} min-h-40 font-mono text-xs`}
+                                                value={gdprForm.data.retention_policy_html}
+                                                onChange={(e) =>
+                                                    gdprForm.setData(
+                                                        'retention_policy_html',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                            />
+                                        </div>
+                                        <div className={card}>
+                                            <h3 className="text-sm font-medium text-ts-fg">
+                                                Checklist DPIA
+                                            </h3>
+                                            <ul className="space-y-2">
+                                                {dpiaChecklistItems.map((item) => (
+                                                    <li key={item.id}>
+                                                        <label className="flex items-start gap-2 text-sm text-ts-fg-soft">
+                                                            <input
+                                                                type="checkbox"
+                                                                className="mt-0.5"
+                                                                checked={Boolean(
+                                                                    gdprForm.data.dpia_checklist?.[item.id],
+                                                                )}
+                                                                onChange={(e) =>
+                                                                    gdprForm.setData('dpia_checklist', {
+                                                                        ...gdprForm.data.dpia_checklist,
+                                                                        [item.id]: e.target.checked,
+                                                                    })
+                                                                }
+                                                            />
+                                                            <span>{item.label}</span>
+                                                        </label>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                        <button type="submit" className={btnPrimary}>
+                                            Αποθήκευση GDPR
+                                        </button>
+                                    </form>
+                                </>
+                            ) : (
+                                <div className={card}>
+                                    <p className="text-sm text-ts-muted">
+                                        Ως ιατρός μπορείτε να δείτε τα audit logs ΑΜΚΑ. Η διαχείριση DPA /
+                                        DSAR είναι διαθέσιμη σε διαχειριστή και γραμματεία.
+                                    </p>
+                                </div>
+                            )}
+
+                            <div className={card}>
+                                <h3 className="text-sm font-semibold text-ts-fg">
+                                    Audit logs ΑΜΚΑ (τελευταία 100)
+                                </h3>
+                                {amkaAccessLogs.length === 0 ? (
+                                    <p className="text-sm text-ts-muted">Δεν υπάρχουν καταγραφές ακόμη.</p>
+                                ) : (
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full text-sm">
+                                            <thead className="text-xs uppercase text-ts-muted">
+                                                <tr>
+                                                    <th className="px-2 py-1.5 text-left">Ημ/νία</th>
+                                                    <th className="px-2 py-1.5 text-left">Χρήστης</th>
+                                                    <th className="px-2 py-1.5 text-left">Αθλητής</th>
+                                                    <th className="px-2 py-1.5 text-left">Ενέργεια</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {amkaAccessLogs.map((row) => (
+                                                    <tr
+                                                        key={row.id}
+                                                        className="border-t border-ts-border text-ts-fg-soft"
+                                                    >
+                                                        <td className="px-2 py-1.5">
+                                                            {row.created_at
+                                                                ? new Date(row.created_at).toLocaleString(
+                                                                      'el-GR',
+                                                                  )
+                                                                : '—'}
+                                                        </td>
+                                                        <td className="px-2 py-1.5">{row.user_name}</td>
+                                                        <td className="px-2 py-1.5">{row.athlete_name}</td>
+                                                        <td className="px-2 py-1.5">
+                                                            {actionLabel(row.action)}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                        </>
+                    )}
+                </div>
             )}
         </AdminLayout>
     );

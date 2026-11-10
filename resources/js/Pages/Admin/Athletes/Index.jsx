@@ -15,6 +15,7 @@ export default function Index({
     healthNoticeRows = [],
     pendingApplications = [],
     capabilities = {},
+    license_usage = null,
 }) {
     const flash = usePage().props.flash;
     const caps = {
@@ -187,6 +188,30 @@ export default function Index({
                     {flash.success}
                 </div>
             )}
+            {flash?.error && (
+                <div className="mb-4 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                    {flash.error}
+                </div>
+            )}
+            {license_usage?.cap ? (
+                <div
+                    className={`mb-4 rounded-md border px-3 py-2 text-sm ${
+                        license_usage.full
+                            ? 'border-rose-200 bg-rose-50 text-rose-800'
+                            : (license_usage.percent ?? 0) >= 90
+                              ? 'border-amber-200 bg-amber-50 text-amber-900'
+                              : 'border-sky-200 bg-sky-50 text-sky-900'
+                    }`}
+                >
+                    Θέσεις άδειας: {license_usage.active} / {license_usage.cap}
+                    {license_usage.remaining != null
+                        ? ` · απομένουν ${license_usage.remaining}`
+                        : ''}
+                    {license_usage.full
+                        ? ' · Το όριο έχει συμπληρωθεί· η εισαγωγή νέων αθλητών είναι μπλοκαρισμένη.'
+                        : null}
+                </div>
+            ) : null}
 
             <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -570,15 +595,37 @@ export default function Index({
                             >
                                 ↓ Εξαγωγή
                             </a>
-                            <label className={`${btnSecondary} cursor-pointer`}>
+                            <label
+                                className={`${btnSecondary} cursor-pointer ${
+                                    license_usage?.full ? 'opacity-50' : ''
+                                }`}
+                            >
                                 ↑ Εισαγωγή
                                 <input
                                     type="file"
                                     accept=".csv,.xlsx,text/csv"
                                     className="hidden"
+                                    disabled={Boolean(license_usage?.full)}
                                     onChange={(e) => {
                                         const file = e.target.files?.[0];
                                         if (!file) return;
+                                        if (license_usage?.full) {
+                                            window.alert(
+                                                'Το όριο αδειών αθλητών έχει συμπληρωθεί. Δεν μπορεί να γίνει εισαγωγή.',
+                                            );
+                                            e.target.value = '';
+                                            return;
+                                        }
+                                        if (
+                                            license_usage?.remaining != null &&
+                                            license_usage.remaining <= 5 &&
+                                            !window.confirm(
+                                                `Απομένουν ${license_usage.remaining} θέσεις άδειας. Συνέχεια με εισαγωγή;`,
+                                            )
+                                        ) {
+                                            e.target.value = '';
+                                            return;
+                                        }
                                         const data = new FormData();
                                         data.append('file', file);
                                         router.post(route('admin.athletes.import'), data, {

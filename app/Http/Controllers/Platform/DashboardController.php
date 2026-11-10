@@ -36,6 +36,8 @@ class DashboardController extends Controller
         $previewId = $request->session()->get('platform_preview_club_id');
         $activePreview = $clubs->firstWhere('id', $previewId);
 
+        $backupController = app(PlatformBackupController::class);
+
         return Inertia::render('Platform/Dashboard', [
             'clubsCount' => $clubs->count(),
             'packagesCount' => LicensePackage::query()->count(),
@@ -47,6 +49,9 @@ class DashboardController extends Controller
             'platformConfig' => $this->configForInertia($config->get()),
             'hostingCost' => $hosting->snapshot(),
             'loginHistory' => LoginActivityController::mappedRows(),
+            'diagnosticCounts' => $backupController->diagnosticCounts(),
+            'googleDriveOauthConfigured' => filled(config('services.google_drive.client_id'))
+                && filled(config('services.google_drive.client_secret')),
             'catalogs' => [
                 'academyModules' => Navigation::academyModules(),
                 'financeTabs' => $config->financeTabsCatalog(),

@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Admin;
 use App\Models\AcademyClass;
 use App\Models\Training;
 use App\Services\Trainings\MissingAttendanceTrainings;
+use App\Support\CoachClassScope;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -25,13 +27,34 @@ class TrainingController extends ClubResourceController
         return 'trainings';
     }
 
+    protected function clubQuery(string $modelClass, Request $request): Builder
+    {
+        $builder = parent::clubQuery($modelClass, $request);
+
+        if ($modelClass !== Training::class) {
+            return $builder;
+        }
+
+        $allowedClassIds = CoachClassScope::classIdsForRequest($request);
+        if ($allowedClassIds === null) {
+            return $builder;
+        }
+
+        if ($allowedClassIds === []) {
+            return $builder->whereRaw('1 = 0');
+        }
+
+        return $builder->whereIn('academy_class_id', $allowedClassIds);
+    }
+
     public function index(Request $request): Response
     {
         $this->classLookup = [];
         $response = parent::index($request);
 
         $clubId = $this->clubId($request);
-        $missing = $this->missingAttendance->forClub($clubId);
+        $allowedClassIds = CoachClassScope::classIdsForRequest($request);
+        $missing = $this->missingAttendance->forClub($clubId, $allowedClassIds);
 
         return $response->with([
             'missingAttendance' => array_slice($missing, 0, 50),

@@ -1,3 +1,4 @@
+import PaymentReceiptModal, { draftFromTransaction } from '@/Components/PaymentReceiptModal';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
@@ -82,13 +83,20 @@ export default function Index({
     seasonStart,
     seasonLabel,
     filters,
+    clubName = '',
+    clubLogoUrl = null,
 }) {
     const flash = usePage().props.flash;
     const [query, setQuery] = useState(filters?.q || '');
+    const [receiptTx, setReceiptTx] = useState(null);
     const now = new Date();
     const isMember = showingMembers || selected?.party_type === 'member';
     const listRows = isMember ? members : athletes;
     const partyLabel = isMember ? 'Μέλη' : 'Αθλητές';
+    const receiptDraft = useMemo(
+        () => (receiptTx ? draftFromTransaction(receiptTx, selected) : null),
+        [receiptTx, selected],
+    );
 
     const form = useForm({
         athlete_id: selected?.party_type === 'member' ? '' : selected?.id || '',
@@ -641,25 +649,51 @@ export default function Index({
                                                 <td className="px-2 py-1.5">
                                                     {t.month || '—'}/{t.year || '—'}
                                                 </td>
-                                                <td className="px-2 py-1.5">{t.receipt_number || '—'}</td>
+                                                <td className="px-2 py-1.5">
+                                                    {t.receipt_number ? (
+                                                        <button
+                                                            type="button"
+                                                            className="text-ts-accent underline hover:text-ts-accent-hover"
+                                                            onClick={() => setReceiptTx(t)}
+                                                        >
+                                                            {t.receipt_number}
+                                                        </button>
+                                                    ) : (
+                                                        '—'
+                                                    )}
+                                                </td>
                                                 <td className="px-2 py-1.5">{t.payment_method || '—'}</td>
                                                 <td className="max-w-[10rem] truncate px-2 py-1.5">
                                                     {t.comments || '—'}
                                                 </td>
                                                 <td className="px-2 py-1.5 text-right">
-                                                    <button
-                                                        type="button"
-                                                        className="text-rose-400 hover:text-rose-700"
-                                                        onClick={() => {
-                                                            if (confirm('Διαγραφή συναλλαγής;')) {
-                                                                router.delete(
-                                                                    route('admin.transactions.destroy', t.id),
-                                                                );
-                                                            }
-                                                        }}
-                                                    >
-                                                        Διαγραφή
-                                                    </button>
+                                                    <div className="flex flex-wrap justify-end gap-2">
+                                                        {t.type === 'payment' && t.receipt_number ? (
+                                                            <button
+                                                                type="button"
+                                                                className="text-ts-accent hover:text-ts-accent-hover"
+                                                                onClick={() => setReceiptTx(t)}
+                                                            >
+                                                                Απόδειξη
+                                                            </button>
+                                                        ) : null}
+                                                        <button
+                                                            type="button"
+                                                            className="text-rose-400 hover:text-rose-700"
+                                                            onClick={() => {
+                                                                if (confirm('Διαγραφή συναλλαγής;')) {
+                                                                    router.delete(
+                                                                        route(
+                                                                            'admin.transactions.destroy',
+                                                                            t.id,
+                                                                        ),
+                                                                    );
+                                                                }
+                                                            }}
+                                                        >
+                                                            Διαγραφή
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
@@ -677,6 +711,14 @@ export default function Index({
                     </Panel>
                 </div>
             </div>
+
+            <PaymentReceiptModal
+                open={Boolean(receiptTx)}
+                logoUrl={clubLogoUrl}
+                clubName={clubName}
+                initial={receiptDraft}
+                onClose={() => setReceiptTx(null)}
+            />
         </AdminLayout>
     );
 }

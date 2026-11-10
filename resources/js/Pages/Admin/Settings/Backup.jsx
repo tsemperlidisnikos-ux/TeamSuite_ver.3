@@ -1,14 +1,17 @@
 import AdminLayout from '@/Layouts/AdminLayout';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 
-export default function Backup({ lastDryRun, verify, currentCounts }) {
+export default function Backup({ lastDryRun, verify, currentCounts, canQuickClubBackup }) {
     const { flash, auth } = usePage().props;
     const clubName = auth?.user?.club_name || auth?.club?.name || 'σύλλογος';
     const clubRole = auth?.user?.role || '';
-    const canDownloadBackup =
-        !!auth?.user?.is_platform_admin ||
-        clubRole === 'admin' ||
-        clubRole === 'secretariat';
+    const canManageBackup =
+        typeof canQuickClubBackup === 'boolean'
+            ? canQuickClubBackup
+            : !!auth?.user?.is_platform_admin ||
+              clubRole === 'admin' ||
+              clubRole === 'secretariat';
+    const canDownloadBackup = canManageBackup;
     const { data, setData, post, processing, errors } = useForm({
         backup_file: null,
     });
@@ -20,6 +23,7 @@ export default function Backup({ lastDryRun, verify, currentCounts }) {
 
     const submit = (e) => {
         e.preventDefault();
+        if (!canManageBackup) return;
         post(route('admin.settings.backup.preview'), {
             forceFormData: true,
         });
@@ -86,6 +90,7 @@ export default function Backup({ lastDryRun, verify, currentCounts }) {
                         ). Πρώτα προεπισκόπηση (dry-run), μετά επιβεβαίωση.
                     </p>
 
+                    {canManageBackup ? (
                     <form onSubmit={submit} className="mt-5 space-y-4">
                         <input
                             type="file"
@@ -106,8 +111,14 @@ export default function Backup({ lastDryRun, verify, currentCounts }) {
                             Προεπισκόπηση επαναφοράς
                         </button>
                     </form>
+                    ) : (
+                        <p className="mt-3 text-sm text-ts-muted">
+                            Η επαναφορά backup είναι διαθέσιμη μόνο σε διαχειριστή πλατφόρμας,
+                            διαχειριστή συλλόγου και γραμματεία.
+                        </p>
+                    )}
 
-                    {lastDryRun && (
+                    {canManageBackup && lastDryRun && (
                         <div className="mt-6 border-t border-ts-border pt-4">
                             <h3 className="text-sm font-semibold text-ts-fg">
                                 {lastDryRun.restored ? 'Αποτέλεσμα εισαγωγής' : 'Dry-run μετρητές'}

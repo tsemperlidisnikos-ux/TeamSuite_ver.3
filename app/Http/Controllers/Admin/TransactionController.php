@@ -7,12 +7,14 @@ use App\Http\Controllers\Controller;
 use App\Models\Athlete;
 use App\Models\AthleteTransaction;
 use App\Models\Attendance;
+use App\Models\Club;
 use App\Models\ClubMember;
 use App\Models\ClubSeason;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -226,6 +228,12 @@ class TransactionController extends Controller
             ->where('is_active', true)
             ->first(['name']);
 
+        $club = $request->attributes->get('currentClub') ?? $request->user()?->activeClub;
+        $clubName = $club instanceof Club ? (string) $club->name : '';
+        $clubLogoUrl = $club instanceof Club && $club->logo_path
+            ? Storage::disk('public')->url($club->logo_path)
+            : null;
+
         return Inertia::render('Admin/Transactions/Index', [
             'athletes' => $athleteRows,
             'members' => $memberRows,
@@ -237,6 +245,8 @@ class TransactionController extends Controller
             'sports' => $sports,
             'seasonStart' => $seasonStart,
             'seasonLabel' => $activeSeason?->name ?: sprintf('%d-%d', $seasonStart, $seasonStart + 1),
+            'clubName' => $clubName,
+            'clubLogoUrl' => $clubLogoUrl,
             'filters' => [
                 'q' => $q,
                 'sport' => $sport,

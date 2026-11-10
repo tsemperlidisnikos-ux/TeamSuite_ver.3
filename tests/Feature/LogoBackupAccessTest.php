@@ -6,6 +6,7 @@ use App\Models\Club;
 use App\Models\User;
 use App\Support\Roles;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -95,5 +96,42 @@ class LogoBackupAccessTest extends TestCase
         $this->assertFalse(Roles::canQuickClubBackup(false, Roles::PARENT));
         $this->assertFalse(Roles::canQuickClubBackup(false, Roles::COACH));
         $this->assertFalse(Roles::canQuickClubBackup(false, null));
+    }
+
+    public function test_parent_cannot_preview_or_restore_club_backup(): void
+    {
+        ['user' => $user] = $this->seedClubUser(Roles::PARENT);
+
+        $json = file_get_contents(base_path('tests/fixtures/teamsuite-club-backup-minimal.json'));
+        $file = UploadedFile::fake()->createWithContent('club.json', $json);
+
+        $preview = $this->actingAs($user)->post(route('admin.settings.backup.preview'), [
+            'backup_file' => $file,
+        ]);
+        $this->assertSame(
+            403,
+            $preview->status(),
+            'Parent preview expected 403, got '.$preview->status(),
+        );
+
+        $restore = $this->actingAs($user)->post(route('admin.settings.backup.restore'), [
+            'backup_id' => (string) Str::uuid(),
+            'mode' => 'merge',
+        ]);
+        $this->assertSame(
+            403,
+            $restore->status(),
+            'Parent restore expected 403, got '.$restore->status(),
+        );
+
+        $confirm = $this->actingAs($user)->post(route('admin.settings.backup.confirm'), [
+            'backup_id' => (string) Str::uuid(),
+            'mode' => 'merge',
+        ]);
+        $this->assertSame(
+            403,
+            $confirm->status(),
+            'Parent confirm expected 403, got '.$confirm->status(),
+        );
     }
 }

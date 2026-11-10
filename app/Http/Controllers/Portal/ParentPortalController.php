@@ -7,6 +7,7 @@ use App\Models\Announcement;
 use App\Models\Athlete;
 use App\Models\AthleteTransaction;
 use App\Models\Attendance;
+use App\Models\Club;
 use App\Models\ClubSetting;
 use App\Models\Facility;
 use App\Models\ParentAthleteLink;
@@ -18,6 +19,7 @@ use App\Support\Roles;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -145,6 +147,13 @@ class ParentPortalController extends Controller
             'matches' => $matches->values(),
             'recent_attendance' => $recentAttendance->values(),
             'payment_history' => $paymentHistory->values(),
+            'receipts' => $paymentHistory
+                ->filter(fn (array $row) => filled($row['receipt_number'] ?? null))
+                ->values(),
+            'clubName' => $club instanceof Club ? (string) $club->name : '',
+            'clubLogoUrl' => $club instanceof Club && $club->logo_path
+                ? Storage::disk('public')->url($club->logo_path)
+                : null,
             'today' => $today,
             'tab' => $tab,
         ]);
@@ -393,12 +402,25 @@ class ParentPortalController extends Controller
             ->where('type', 'payment')
             ->orderByDesc('created_at')
             ->limit(24)
-            ->get(['id', 'athlete_id', 'amount', 'comments', 'payment_method', 'created_at'])
+            ->get([
+                'id',
+                'athlete_id',
+                'amount',
+                'comments',
+                'payment_method',
+                'receipt_number',
+                'receipt_series',
+                'receipt_seq',
+                'created_at',
+            ])
             ->map(fn (AthleteTransaction $row) => [
                 'id' => $row->id,
                 'athlete_id' => $row->athlete_id,
                 'amount' => (float) $row->amount,
                 'comments' => $row->comments ?: $row->payment_method,
+                'receipt_number' => $row->receipt_number,
+                'receipt_series' => $row->receipt_series,
+                'receipt_seq' => $row->receipt_seq,
                 'created_at' => $row->created_at?->toIso8601String(),
             ]);
     }

@@ -39,6 +39,8 @@ class PlatformSettingsController extends Controller
             'seasons' => ['sometimes', 'array'],
             'seasons.*' => ['string', 'max:64'],
             'healthCardTemplatesBySport' => ['sometimes', 'array'],
+            'backupSchedules' => ['sometimes', 'array'],
+            'googleDriveBackup' => ['sometimes', 'array'],
         ]);
 
         $config->update($data);

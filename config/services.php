@@ -41,6 +41,11 @@ return [
         'subject' => env('VAPID_SUBJECT', 'mailto:admin@teamsuite.me'),
     ],
 
+    'google_drive' => [
+        'client_id' => env('GOOGLE_DRIVE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_DRIVE_CLIENT_SECRET'),
+    ],
+
     /*
     | Legacy TeamSuite (Vercel) Blob media — used until /api/club-media paths are migrated.
     */

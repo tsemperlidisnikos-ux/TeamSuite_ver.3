@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Admin\Concerns\InteractsWithClubResource;
 use App\Http\Controllers\Controller;
+use App\Jobs\GdprRetentionJob;
+use App\Models\AmkaAccessLog;
 use App\Models\Association;
 use App\Models\Athlete;
 use App\Models\ClothingPackage;
@@ -18,9 +20,11 @@ use App\Models\RentalSetting;
 use App\Models\SizeChart;
 use App\Models\Sport;
 use App\Models\User;
+use App\Services\Gdpr\GdprSubjectExportService;
 use App\Services\Mail\ClubSmtpMailer;
 use App\Services\Platform\PlatformConfigService;
 use App\Support\ClubSetupWizard;
+use App\Support\GdprDpiaChecklist;
 use App\Support\Navigation;
 use App\Support\Roles;
 use App\Support\UserPasswordVault;
@@ -31,6 +35,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class SettingsController extends Controller
 {
@@ -78,11 +83,15 @@ class SettingsController extends Controller
         }
 
         $user = $request->user();
-        $canManageUsers = Roles::canManageClubUsers(
-            (bool) $user?->is_platform_admin,
-            $user?->roleInClub($club),
-        );
+        $clubRole = $user?->roleInClub($club);
+        $isPlatformAdmin = (bool) $user?->is_platform_admin;
+        $canManageUsers = Roles::canManageClubUsers($isPlatformAdmin, $clubRole);
+        $canAccessAmka = Roles::canAccessAmka($isPlatformAdmin, $clubRole);
+        $canManageGdpr = Roles::canManageGdpr($isPlatformAdmin, $clubRole);
         if ($tab === 'users' && ! $canManageUsers) {
+            $tab = 'club';
+        }
+        if ($tab === 'amka' && ! $canAccessAmka) {
             $tab = 'club';
         }
 
@@ -98,11 +107,47 @@ class SettingsController extends Controller
             ->where('status', '!=', 'inactive')
             ->count();
         $athleteCap = (int) ($club->licensePackage?->athlete_cap ?? 0);
-        $user = $request->user();
-        $canRunSetup = Roles::canRunClubSetup(
-            (bool) $user?->is_platform_admin,
-            $user?->roleInClub($club),
-        );
+        $canRunSetup = Roles::canRunClubSetup($isPlatformAdmin, $clubRole);
+        $dpiaChecklist = GdprDpiaChecklist::normalize($profile['dpia_checklist'] ?? []);
+        $amkaAccessLogs = $canAccessAmka
+            ? AmkaAccessLog::query()->withoutGlobalScopes()
+                ->where('club_id', $club->id)
+                ->with([
+                    'user:id,name,email',
+                    'athlete:id,first_name,last_name',
+                ])
+                ->orderByDesc('created_at')
+                ->limit(100)
+                ->get()
+                ->map(fn (AmkaAccessLog $log) => [
+                    'id' => $log->id,
+                    'action' => $log->action,
+                    'created_at' => optional($log->created_at)?->toIso8601String(),
+                    'user_name' => $log->user?->name
+                        ?: ($log->user?->email ?: '—'),
+                    'athlete_name' => $log->athlete
+                        ? trim($log->athlete->last_name.' '.$log->athlete->first_name)
+                        : '—',
+                ])
+                ->values()
+                ->all()
+            : [];
+        $gdprAthletes = $canManageGdpr
+            ? Athlete::query()->withoutGlobalScopes()
+                ->where('club_id', $club->id)
+                ->orderBy('last_name')
+                ->orderBy('first_name')
+                ->limit(500)
+                ->get(['id', 'first_name', 'last_name', 'status'])
+                ->map(fn (Athlete $athlete) => [
+                    'id' => $athlete->id,
+                    'first_name' => $athlete->first_name,
+                    'last_name' => $athlete->last_name,
+                    'status' => $athlete->status,
+                ])
+                ->values()
+                ->all()
+            : [];
 
         return Inertia::render('Admin/Settings/Index', [
             'tab' => $tab,
@@ -157,7 +202,13 @@ class SettingsController extends Controller
                 'retention_policy_html' => $settings->retention_policy_html ?? '',
                 'data_retention_months' => (int) ($settings->data_retention_months ?? 24),
                 'dpa_accepted_at' => optional($settings->dpa_accepted_at)?->toIso8601String(),
+                'dpia_checklist' => $dpiaChecklist,
             ],
+            'amkaAccessLogs' => $amkaAccessLogs,
+            'gdprAthletes' => $gdprAthletes,
+            'dpiaChecklistItems' => GdprDpiaChecklist::items(),
+            'canAccessAmka' => $canAccessAmka,
+            'canManageGdpr' => $canManageGdpr,
             'users' => $canManageUsers ? $this->clubUsersPayload($club) : [],
             'canManageUsers' => $canManageUsers,
             'roles' => collect(self::ROLES)
@@ -494,14 +545,19 @@ class SettingsController extends Controller
 
     public function updateGdpr(Request $request): RedirectResponse
     {
+        $club = $this->clubModel($request);
+        $this->assertCanManageGdpr($request, $club);
+
         $data = $request->validate([
             'dpa_html' => 'nullable|string',
             'retention_policy_html' => 'nullable|string',
             'data_retention_months' => 'nullable|integer|min:1|max:120',
             'accept_dpa' => 'boolean',
+            'dpia_checklist' => 'nullable|array',
+            'dpia_checklist.*' => ['nullable'],
         ]);
 
-        $settings = $this->settingsFor($this->clubModel($request));
+        $settings = $this->settingsFor($club);
         if (array_key_exists('dpa_html', $data)) {
             $settings->dpa_html = $data['dpa_html'];
         }
@@ -514,9 +570,44 @@ class SettingsController extends Controller
         if (filter_var($data['accept_dpa'] ?? false, FILTER_VALIDATE_BOOLEAN) && ! $settings->dpa_accepted_at) {
             $settings->dpa_accepted_at = now();
         }
+        if (array_key_exists('dpia_checklist', $data)) {
+            $profile = $settings->profile ?? [];
+            $profile['dpia_checklist'] = GdprDpiaChecklist::normalize($data['dpia_checklist'] ?? []);
+            $settings->profile = $profile;
+        }
         $settings->save();
 
         return $this->backTab('amka', 'Οι ρυθμίσεις GDPR αποθηκεύτηκαν.');
+    }
+
+    public function exportDsar(Request $request, string $athleteId, GdprSubjectExportService $exporter): StreamedResponse
+    {
+        $club = $this->clubModel($request);
+        $this->assertCanManageGdpr($request, $club);
+
+        $athlete = Athlete::query()->withoutGlobalScopes()
+            ->where('club_id', $club->id)
+            ->whereKey($athleteId)
+            ->firstOrFail();
+
+        $payload = $exporter->export($athlete);
+        $filename = 'gdpr-export-'.$athlete->id.'.json';
+
+        return response()->streamDownload(function () use ($payload) {
+            echo json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        }, $filename, [
+            'Content-Type' => 'application/json; charset=UTF-8',
+        ]);
+    }
+
+    public function runGdprRetention(Request $request): RedirectResponse
+    {
+        $club = $this->clubModel($request);
+        $this->assertCanManageGdpr($request, $club);
+
+        GdprRetentionJob::dispatchSync();
+
+        return $this->backTab('amka', 'Εκτελέστηκε το GDPR retention (καθαρισμός παλαιών logs).');
     }
 
     public function storeUser(Request $request): RedirectResponse
@@ -880,6 +971,19 @@ class SettingsController extends Controller
         abort_unless($club instanceof Club, 403);
 
         return $club;
+    }
+
+    private function assertCanManageGdpr(Request $request, Club $club): void
+    {
+        $user = $request->user();
+        abort_unless(
+            Roles::canManageGdpr(
+                (bool) $user?->is_platform_admin,
+                $user?->roleInClub($club),
+            ),
+            403,
+            'Η διαχείριση GDPR είναι διαθέσιμη μόνο σε διαχειριστή ή γραμματεία.',
+        );
     }
 
     private function assertCanManageClubUsers(Request $request, Club $club): void

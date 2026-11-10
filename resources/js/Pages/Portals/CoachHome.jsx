@@ -1,3 +1,4 @@
+import PortalPushOptIn from '@/Components/PortalPushOptIn';
 import {
     PortalBottomTabs,
     PortalPanel,
@@ -11,6 +12,7 @@ import {
     formatTimeRange,
     initials,
 } from '@/lib/portalFormat';
+import { applyPortalChrome } from '@/utils/portalApp';
 import { Head, router, usePage } from '@inertiajs/react';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -52,6 +54,10 @@ export default function CoachHome({
     const [presentOverrides, setPresentOverrides] = useState({});
     const [saving, setSaving] = useState(false);
     const [notice, setNotice] = useState('');
+
+    useEffect(() => {
+        applyPortalChrome('coach');
+    }, []);
 
     useEffect(() => {
         if (attendance_date && attendance_date !== date) {
@@ -303,6 +309,7 @@ export default function CoachHome({
 
             <main className="space-y-4 px-4 py-5 pb-8 md:pb-5">
                 <PortalPillTabs tabs={TABS} active={tab} onChange={setTab} />
+                <PortalPushOptIn kind="coach" />
 
                 {tab === 'home' ? (
                     <>

@@ -1,3 +1,5 @@
+import PaymentReceiptModal, { draftFromTransaction } from '@/Components/PaymentReceiptModal';
+import PortalPushOptIn from '@/Components/PortalPushOptIn';
 import {
     BalanceBadge,
     PortalBottomTabs,
@@ -16,8 +18,9 @@ import {
     gdprLabel,
     healthDocStatus,
 } from '@/lib/portalFormat';
+import { applyPortalChrome } from '@/utils/portalApp';
 import { Head, router, usePage } from '@inertiajs/react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 const TABS = [
     { id: 'overview', label: 'Αρχική', glyph: '▦' },
@@ -50,12 +53,26 @@ export default function ParentHome({
     matches = [],
     recent_attendance = [],
     payment_history = [],
+    receipts = [],
+    clubName = '',
+    clubLogoUrl = null,
     today = new Date().toISOString().slice(0, 10),
     tab: tabProp = 'overview',
 }) {
     const flash = usePage().props.flash;
     const [tab, setTabState] = useState(() => resolveInitialTab(tabProp));
     const [absenceAthleteId, setAbsenceAthleteId] = useState(athletes[0]?.id || '');
+    const [receiptRow, setReceiptRow] = useState(null);
+    const receiptList = useMemo(
+        () =>
+            (receipts?.length ? receipts : payment_history.filter((r) => r.receipt_number)) || [],
+        [receipts, payment_history],
+    );
+    const receiptDraft = useMemo(() => {
+        if (!receiptRow) return null;
+        const athlete = athletes.find((a) => a.id === receiptRow.athlete_id);
+        return draftFromTransaction(receiptRow, athlete || null);
+    }, [receiptRow, athletes]);
     const [absenceDate, setAbsenceDate] = useState(today);
     const [absenceReason, setAbsenceReason] = useState('sick');
     const [absenceNotes, setAbsenceNotes] = useState('');
@@ -63,6 +80,10 @@ export default function ParentHome({
     const [absenceMsg, setAbsenceMsg] = useState('');
     const [payBusyId, setPayBusyId] = useState('');
     const [payMsg, setPayMsg] = useState('');
+
+    useEffect(() => {
+        applyPortalChrome('parent');
+    }, []);
 
     async function startCheckout(athleteId, providerId, amount) {
         setPayMsg('');
@@ -201,6 +222,7 @@ export default function ParentHome({
 
             <main className="space-y-4 px-4 py-5 pb-8 md:pb-5">
                 <PortalPillTabs tabs={TABS} active={tab} onChange={setTab} />
+                <PortalPushOptIn kind="parent" />
 
                 {athletes.length === 0 ? (
                     <PortalPanel title="Σύνδεση αθλητών">
@@ -501,9 +523,51 @@ export default function ParentHome({
                         </PortalPanel>
 
                         <PortalPanel title="Αποδείξεις είσπραξης" icon="🧾">
-                            <p className="text-sm text-ts-muted">
-                                Δεν έχουν κοπεί αποδείξεις για τους αθλητές σας.
-                            </p>
+                            {receiptList.length === 0 ? (
+                                <p className="text-sm text-ts-muted">
+                                    Δεν έχουν κοπεί αποδείξεις για τους αθλητές σας.
+                                </p>
+                            ) : (
+                                <PortalTable
+                                    columns={[
+                                        {
+                                            key: 'date',
+                                            label: 'Ημ/νία',
+                                            render: (r) => formatDate(r.created_at),
+                                        },
+                                        {
+                                            key: 'athlete',
+                                            label: 'Αθλητής',
+                                            render: (r) => athleteNameById.get(r.athlete_id) || '—',
+                                        },
+                                        {
+                                            key: 'receipt',
+                                            label: 'Απόδειξη',
+                                            render: (r) => r.receipt_number || '—',
+                                        },
+                                        {
+                                            key: 'amount',
+                                            label: 'Ποσό',
+                                            render: (r) => formatCurrency(r.amount),
+                                        },
+                                        {
+                                            key: 'view',
+                                            label: '',
+                                            render: (r) => (
+                                                <button
+                                                    type="button"
+                                                    className="text-ts-accent underline"
+                                                    onClick={() => setReceiptRow(r)}
+                                                >
+                                                    Προβολή
+                                                </button>
+                                            ),
+                                        },
+                                    ]}
+                                    rows={receiptList}
+                                    empty="Δεν έχουν κοπεί αποδείξεις για τους αθλητές σας."
+                                />
+                            )}
                         </PortalPanel>
 
                         <PortalPanel title="Ιστορικό πληρωμών" icon="💳">
@@ -611,6 +675,15 @@ export default function ParentHome({
             </main>
 
             <PortalBottomTabs tabs={TABS} active={tab} onChange={setTab} />
+
+            <PaymentReceiptModal
+                open={Boolean(receiptRow)}
+                logoUrl={clubLogoUrl}
+                clubName={clubName}
+                initial={receiptDraft}
+                readOnly
+                onClose={() => setReceiptRow(null)}
+            />
         </div>
     );
 }
