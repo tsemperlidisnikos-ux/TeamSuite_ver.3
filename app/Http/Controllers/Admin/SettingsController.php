@@ -536,11 +536,8 @@ class SettingsController extends Controller
         }
 
         $permissions = array_values($data['permissions'] ?? []);
-        if ($data['role'] === 'parent') {
-            $permissions = array_values(array_filter(
-                $permissions,
-                static fn (string $module): bool => $module !== 'announcements',
-            ));
+        if ($data['role'] === 'parent' && ! in_array('announcements', $permissions, true)) {
+            $permissions[] = 'announcements';
         }
 
         $club->users()->syncWithoutDetaching([
@@ -579,11 +576,8 @@ class SettingsController extends Controller
         }
 
         $permissions = array_values($data['permissions'] ?? []);
-        if ($data['role'] === 'parent') {
-            $permissions = array_values(array_filter(
-                $permissions,
-                static fn (string $module): bool => $module !== 'announcements',
-            ));
+        if ($data['role'] === 'parent' && ! in_array('announcements', $permissions, true)) {
+            $permissions[] = 'announcements';
         }
 
         $club->users()->updateExistingPivot($user->id, [

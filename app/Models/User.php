@@ -92,7 +92,7 @@ class User extends Authenticatable
         if (is_array($raw) && $raw !== []) {
             $permissions = array_values(array_unique(array_filter($raw, 'is_string')));
 
-            return $this->denyParentAnnouncementModule($role, $permissions);
+            return $this->applyParentModulePolicy($role, $permissions);
         }
 
         $defaults = app(PlatformConfigService::class)->get()['clubRolePermissions'][$role] ?? [];
@@ -102,7 +102,7 @@ class User extends Authenticatable
 
         $permissions = array_values(array_unique(array_filter($defaults, 'is_string')));
 
-        return $this->denyParentAnnouncementModule($role, $permissions);
+        return $this->applyParentModulePolicy($role, $permissions);
     }
 
     /**
@@ -127,20 +127,21 @@ class User extends Authenticatable
     }
 
     /**
-     * Parents may only read announcements in the parent portal — never the send module.
+     * Parents may view announcements (send is blocked in controllers/UI).
      *
      * @param  list<string>  $permissions
      * @return list<string>
      */
-    private function denyParentAnnouncementModule(string $role, array $permissions): array
+    private function applyParentModulePolicy(string $role, array $permissions): array
     {
         if ($role !== 'parent') {
             return $permissions;
         }
 
-        return array_values(array_filter(
-            $permissions,
-            static fn (string $module): bool => $module !== 'announcements',
-        ));
+        if (! in_array('announcements', $permissions, true)) {
+            $permissions[] = 'announcements';
+        }
+
+        return array_values(array_unique($permissions));
     }
 }

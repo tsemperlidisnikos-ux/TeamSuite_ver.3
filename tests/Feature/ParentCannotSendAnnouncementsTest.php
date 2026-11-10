@@ -18,7 +18,7 @@ class ParentCannotSendAnnouncementsTest extends TestCase
     use RefreshDatabase;
 
     /**
-     * @return array{club: Club, parentUser: User, athlete: Athlete}
+     * @return array{club: Club, parentUser: User, athlete: Athlete, otherAthlete: Athlete}
      */
     private function seedParent(): array
     {
@@ -37,7 +37,7 @@ class ParentCannotSendAnnouncementsTest extends TestCase
         $parentUser->clubs()->attach($club->id, [
             'role' => 'parent',
             'is_active' => true,
-            'permissions' => json_encode(['dashboard', 'fees', 'announcements', 'settings']),
+            'permissions' => json_encode(['dashboard', 'fees', 'settings']),
         ]);
 
         $athlete = Athlete::query()->withoutGlobalScopes()->create([
@@ -45,6 +45,15 @@ class ParentCannotSendAnnouncementsTest extends TestCase
             'club_id' => $club->id,
             'first_name' => 'Μαρία',
             'last_name' => 'Παπα',
+            'status' => 'active',
+            'gdpr_consent' => 'pending',
+        ]);
+
+        $otherAthlete = Athlete::query()->withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(),
+            'club_id' => $club->id,
+            'first_name' => 'Γιάννης',
+            'last_name' => 'Άλλος',
             'status' => 'active',
             'gdpr_consent' => 'pending',
         ]);
@@ -57,17 +66,17 @@ class ParentCannotSendAnnouncementsTest extends TestCase
             'relation' => 'parent',
         ]);
 
-        return compact('club', 'parentUser', 'athlete');
+        return compact('club', 'parentUser', 'athlete', 'otherAthlete');
     }
 
-    public function test_parent_permissions_never_include_announcements_module(): void
+    public function test_parent_permissions_include_announcements_for_viewing(): void
     {
         ['parentUser' => $user, 'club' => $club] = $this->seedParent();
 
-        $this->assertNotContains('announcements', $user->permissionsInClub($club));
+        $this->assertContains('announcements', $user->permissionsInClub($club));
     }
 
-    public function test_parent_is_forbidden_from_admin_announcement_routes(): void
+    public function test_parent_can_view_but_not_send_announcements(): void
     {
         ['parentUser' => $user, 'club' => $club] = $this->seedParent();
 
@@ -75,7 +84,7 @@ class ParentCannotSendAnnouncementsTest extends TestCase
             'id' => (string) Str::uuid(),
             'club_id' => $club->id,
             'created_by' => $user->id,
-            'title' => 'Υπάρχουσα',
+            'title' => 'Για γονείς',
             'body' => 'Σώμα',
             'audience' => ['roles' => ['parent']],
             'published_at' => now(),
@@ -84,7 +93,13 @@ class ParentCannotSendAnnouncementsTest extends TestCase
 
         $this->actingAs($user)
             ->get(route('admin.announcements.index'))
-            ->assertForbidden();
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Announcements/Index')
+                ->where('parentReadOnly', true)
+                ->has('items.data', 1)
+                ->where('items.data.0.title', 'Για γονείς')
+            );
 
         $this->actingAs($user)
             ->post(route('admin.announcements.store'), [
@@ -114,11 +129,29 @@ class ParentCannotSendAnnouncementsTest extends TestCase
 
         $this->assertDatabaseHas('announcements', [
             'id' => $row->id,
-            'title' => 'Υπάρχουσα',
+            'title' => 'Για γονείς',
         ]);
         $this->assertDatabaseMissing('announcements', [
             'title' => 'Νέα από γονέα',
         ]);
+    }
+
+    public function test_parent_fees_show_only_linked_children(): void
+    {
+        ['parentUser' => $user, 'athlete' => $athlete, 'otherAthlete' => $other] = $this->seedParent();
+
+        $this->actingAs($user)
+            ->get(route('admin.fees.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Fees/Index')
+                ->where('parentReadOnly', true)
+                ->has('rows', 1)
+                ->where('rows.0.id', $athlete->id)
+                ->where('rows.0.first_name', 'Μαρία')
+            );
+
+        $this->assertNotSame($other->id, $athlete->id);
     }
 
     public function test_parent_portal_still_shows_announcements_read_only(): void

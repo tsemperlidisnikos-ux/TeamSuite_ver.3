@@ -76,6 +76,7 @@ export default function Index({
     defaultYear,
     monthLabels = [],
     appliesToOptions = [],
+    parentReadOnly = false,
 }) {
     const flash = usePage().props.flash;
     const [selected, setSelected] = useState([]);
@@ -212,32 +213,36 @@ export default function Index({
                 <div>
                     <h2 className="text-xl font-semibold text-ts-fg">Συνδρομές / Πληρωμές</h2>
                     <p className="text-sm text-ts-muted">
-                        Υπόλοιπα συνδρομών, πρότυπα χρεώσεων και υπενθυμίσεις οφειλών.
+                        {parentReadOnly
+                            ? 'Υπόλοιπα συνδρομών μόνο για τα συνδεδεμένα παιδιά σας.'
+                            : 'Υπόλοιπα συνδρομών, πρότυπα χρεώσεων και υπενθυμίσεις οφειλών.'}
                     </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                    <button
-                        type="button"
-                        className="rounded-md border border-ts-border px-3 py-1.5 text-sm hover:bg-ts-hover"
-                        onClick={openCreateCharges}
-                    >
-                        Προβολή / Δημιουργία χρεώσεων
-                    </button>
-                    <button
-                        type="button"
-                        className="rounded-md border border-ts-border px-3 py-1.5 text-sm hover:bg-ts-hover"
-                        onClick={openReminders}
-                    >
-                        Υπενθύμιση οφειλών
-                    </button>
-                    <button
-                        type="button"
-                        className="rounded-md bg-ts-accent px-3 py-1.5 text-sm text-ts-accent-fg"
-                        onClick={openNewCharge}
-                    >
-                        + Νέα χρέωση
-                    </button>
-                </div>
+                {!parentReadOnly ? (
+                    <div className="flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            className="rounded-md border border-ts-border px-3 py-1.5 text-sm hover:bg-ts-hover"
+                            onClick={openCreateCharges}
+                        >
+                            Προβολή / Δημιουργία χρεώσεων
+                        </button>
+                        <button
+                            type="button"
+                            className="rounded-md border border-ts-border px-3 py-1.5 text-sm hover:bg-ts-hover"
+                            onClick={openReminders}
+                        >
+                            Υπενθύμιση οφειλών
+                        </button>
+                        <button
+                            type="button"
+                            className="rounded-md bg-ts-accent px-3 py-1.5 text-sm text-ts-accent-fg"
+                            onClick={openNewCharge}
+                        >
+                            + Νέα χρέωση
+                        </button>
+                    </div>
+                ) : null}
             </div>
 
             <div className="mb-4 grid gap-3 sm:grid-cols-3">

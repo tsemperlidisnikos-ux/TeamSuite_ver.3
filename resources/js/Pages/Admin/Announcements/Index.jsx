@@ -74,6 +74,7 @@ export default function Index({
     filters,
     roleOptions = [],
     audienceOptions = {},
+    parentReadOnly = false,
 }) {
     const pageErrors = usePage().props.errors || {};
     const [editingId, setEditingId] = useState(null);
@@ -434,25 +435,30 @@ export default function Index({
                 <div>
                     <h2 className="text-xl font-semibold text-ts-fg">Ανακοινώσεις</h2>
                     <p className="text-sm text-ts-muted">
-                        Δημιουργία και αποστολή ανακοινώσεων σε γονείς, προπονητές και αθλητές
+                        {parentReadOnly
+                            ? 'Προβολή ανακοινώσεων που σας αφορούν. Η αποστολή γίνεται μόνο από τη γραμματεία.'
+                            : 'Δημιουργία και αποστολή ανακοινώσεων σε γονείς, προπονητές και αθλητές'}
                     </p>
                 </div>
-                <button
-                    type="button"
-                    className="inline-flex items-center gap-2 rounded-md bg-ts-accent px-3 py-1.5 text-sm text-ts-accent-fg hover:bg-ts-accent-hover"
-                    onClick={() => {
-                        resetForm();
-                        document.getElementById('announcement-compose')?.scrollIntoView({
-                            behavior: 'smooth',
-                            block: 'start',
-                        });
-                    }}
-                >
-                    <span aria-hidden>✈</span>
-                    Νέα Ανακοίνωση
-                </button>
+                {!parentReadOnly ? (
+                    <button
+                        type="button"
+                        className="inline-flex items-center gap-2 rounded-md bg-ts-accent px-3 py-1.5 text-sm text-ts-accent-fg hover:bg-ts-accent-hover"
+                        onClick={() => {
+                            resetForm();
+                            document.getElementById('announcement-compose')?.scrollIntoView({
+                                behavior: 'smooth',
+                                block: 'start',
+                            });
+                        }}
+                    >
+                        <span aria-hidden>✈</span>
+                        Νέα Ανακοίνωση
+                    </button>
+                ) : null}
             </div>
 
+            {!parentReadOnly ? (
             <form
                 id="announcement-compose"
                 onSubmit={(e) => submit(e)}
@@ -825,6 +831,7 @@ export default function Index({
                     </button>
                 </div>
             </form>
+            ) : null}
 
             <section className="rounded-xl border border-ts-border bg-ts-surface p-4 shadow-sm sm:p-5">
                 <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
@@ -1001,6 +1008,7 @@ export default function Index({
                                                 {item.created_by_name || 'Διαχειριστής'}
                                             </td>
                                             <td className="px-3 py-3.5">
+                                                {!parentReadOnly ? (
                                                 <div className="inline-flex items-center gap-1.5">
                                                     <button
                                                         type="button"
@@ -1057,6 +1065,9 @@ export default function Index({
                                                         </svg>
                                                     </button>
                                                 </div>
+                                                ) : (
+                                                    <span className="text-xs text-ts-muted">Μόνο προβολή</span>
+                                                )}
                                             </td>
                                         </tr>
                                     );

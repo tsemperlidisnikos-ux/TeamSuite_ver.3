@@ -10,6 +10,7 @@ use App\Models\Athlete;
 use App\Models\AthleteTransaction;
 use App\Models\ClubSeason;
 use App\Models\FeeChargeTemplate;
+use App\Models\ParentAthleteLink;
 use App\Models\Sport;
 use App\Services\Audit\ClubActivityLogger;
 use App\Support\PreferredNotifyEmail;
@@ -30,10 +31,25 @@ class FeeController extends Controller
         $q = trim((string) $request->query('q', ''));
         $owedOnly = $request->boolean('owed');
         $classId = (string) $request->query('class_id', '');
+        $clubId = $this->clubId($request);
+        $user = $request->user();
+        $club = $request->attributes->get('currentClub') ?? $user?->activeClub;
+        $userRole = (string) ($user?->roleInClub($club) ?? '');
+        $parentReadOnly = $userRole === 'parent';
+        $linkedAthleteIds = $parentReadOnly && $user
+            ? ParentAthleteLink::query()
+                ->withoutGlobalScopes()
+                ->where('club_id', $clubId)
+                ->where('parent_user_id', $user->id)
+                ->pluck('athlete_id')
+                ->map(fn ($id) => (string) $id)
+                ->all()
+            : null;
 
         $athletes = $this->clubQuery(Athlete::class, $request)
             ->with(['classes:id,name,sport'])
             ->where('status', '!=', 'inactive')
+            ->when($linkedAthleteIds !== null, fn ($b) => $b->whereIn('id', $linkedAthleteIds ?: ['']))
             ->when($q !== '', function ($builder) use ($q) {
                 $like = '%'.$q.'%';
                 $op = config('database.default') === 'pgsql' ? 'ilike' : 'like';
@@ -50,7 +66,6 @@ class FeeController extends Controller
             ->orderBy('first_name')
             ->get(['id', 'first_name', 'last_name', 'status', 'monthly_fee', 'sport', 'email', 'guardian_phone', 'phone', 'meta']);
 
-        $clubId = $this->clubId($request);
         $athleteIds = $athletes->pluck('id');
 
         $balances = AthleteTransaction::query()->withoutGlobalScopes()
@@ -175,8 +190,8 @@ class FeeController extends Controller
 
         return Inertia::render('Admin/Fees/Index', [
             'rows' => $rows->values(),
-            'templates' => $templates,
-            'reminders' => $reminders,
+            'templates' => $parentReadOnly ? [] : $templates,
+            'reminders' => $parentReadOnly ? [] : $reminders,
             'classes' => $this->clubQuery(AcademyClass::class, $request)
                 ->orderBy('name')
                 ->get(['id', 'name', 'sport']),
@@ -189,6 +204,7 @@ class FeeController extends Controller
                 'sport' => $a->sport,
                 'class_ids' => $a->classes->pluck('id')->values()->all(),
             ]),
+            'parentReadOnly' => $parentReadOnly,
             'filters' => [
                 'q' => $q,
                 'owed' => $owedOnly ? '1' : '',
@@ -208,6 +224,7 @@ class FeeController extends Controller
 
     public function storeTemplate(Request $request): RedirectResponse
     {
+        $this->denyParentFeeMutation($request);
         $data = $this->validatedTemplate($request);
         $meta = $this->templateMetaFrom($data);
 
@@ -227,6 +244,7 @@ class FeeController extends Controller
 
     public function updateTemplate(Request $request, string $id): RedirectResponse
     {
+        $this->denyParentFeeMutation($request);
         $data = $this->validatedTemplate($request);
         $row = $this->clubQuery(FeeChargeTemplate::class, $request)->findOrFail($id);
 
@@ -244,6 +262,7 @@ class FeeController extends Controller
 
     public function destroyTemplate(Request $request, string $id): RedirectResponse
     {
+        $this->denyParentFeeMutation($request);
         $this->clubQuery(FeeChargeTemplate::class, $request)->findOrFail($id)->delete();
 
         return back()->with('success', 'Το πρότυπο διαγράφηκε.');
@@ -251,6 +270,7 @@ class FeeController extends Controller
 
     public function generateFromTemplates(Request $request): RedirectResponse
     {
+        $this->denyParentFeeMutation($request);
         $data = $request->validate([
             'template_ids' => 'required|array|min:1',
             'template_ids.*' => 'uuid',
@@ -344,6 +364,7 @@ class FeeController extends Controller
 
     public function remindDebts(Request $request): RedirectResponse
     {
+        $this->denyParentFeeMutation($request);
         $data = $request->validate([
             'athlete_ids' => 'nullable|array',
             'athlete_ids.*' => 'uuid',
@@ -408,6 +429,7 @@ class FeeController extends Controller
 
     public function bulkCharge(Request $request): RedirectResponse
     {
+        $this->denyParentFeeMutation($request);
         $data = $request->validate([
             'athlete_ids' => 'required|array|min:1',
             'athlete_ids.*' => 'uuid',
@@ -608,6 +630,17 @@ class FeeController extends Controller
     private function resolveNotifyEmail(Athlete $athlete): ?string
     {
         return PreferredNotifyEmail::resolvePrimary($athlete);
+    }
+
+    private function denyParentFeeMutation(Request $request): void
+    {
+        $user = $request->user();
+        if (! $user) {
+            abort(403);
+        }
+
+        $role = (string) ($user->roleInClub($user->activeClub) ?? '');
+        abort_if($role === 'parent', 403, 'Οι γονείς μπορούν μόνο να βλέπουν συνδρομές των παιδιών τους.');
     }
 
     /**

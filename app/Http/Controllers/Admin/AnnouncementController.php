@@ -31,14 +31,39 @@ class AnnouncementController extends Controller
 
     public function index(Request $request): Response
     {
-        $this->denyParentAnnouncementAccess($request);
-
         $q = trim((string) $request->query('q', ''));
         $status = (string) $request->query('status', '');
         $role = (string) $request->query('role', '');
 
         $club = $request->attributes->get('currentClub') ?? $request->user()?->activeClub;
         $clubName = trim((string) ($club?->name ?? ''));
+        $user = $request->user();
+        $userRole = (string) ($user?->roleInClub($club) ?? '');
+        $parentReadOnly = $userRole === 'parent';
+
+        $parentLinkedAthleteIds = [];
+        $parentLinkedClassIds = [];
+        if ($parentReadOnly && $user && $club) {
+            $parentLinkedAthleteIds = ParentAthleteLink::query()
+                ->withoutGlobalScopes()
+                ->where('club_id', $club->id)
+                ->where('parent_user_id', $user->id)
+                ->pluck('athlete_id')
+                ->map(fn ($id) => (string) $id)
+                ->all();
+            $parentLinkedClassIds = Athlete::query()
+                ->withoutGlobalScopes()
+                ->where('club_id', $club->id)
+                ->whereIn('id', $parentLinkedAthleteIds)
+                ->with('classes:id')
+                ->get()
+                ->flatMap(fn (Athlete $a) => $a->classes->pluck('id'))
+                ->map(fn ($id) => (string) $id)
+                ->unique()
+                ->values()
+                ->all();
+            $status = 'published';
+        }
 
         $items = $this->clubQuery(Announcement::class, $request)
             ->with(['creator:id,name'])
@@ -100,17 +125,42 @@ class AnnouncementController extends Controller
                 ];
             });
 
+        if ($parentReadOnly) {
+            $parentUserId = (string) $user->id;
+            $items->setCollection(
+                $items->getCollection()->filter(function (array $row) use (
+                    $parentUserId,
+                    $parentLinkedAthleteIds,
+                    $parentLinkedClassIds,
+                ): bool {
+                    $audience = is_array($row['audience'] ?? null) ? $row['audience'] : [];
+
+                    return $this->announcementVisibleToParent(
+                        $audience,
+                        $parentUserId,
+                        $parentLinkedAthleteIds,
+                        $parentLinkedClassIds,
+                    );
+                })->values()
+            );
+        }
+
         return Inertia::render('Admin/Announcements/Index', [
             'items' => $items,
-            'classes' => $this->clubQuery(AcademyClass::class, $request)
-                ->orderBy('name')
-                ->get(['id', 'name', 'sport']),
-            'sports' => $this->clubQuery(Sport::class, $request)
-                ->orderBy('name')
-                ->pluck('name')
-                ->values(),
-            'audienceOptions' => $this->audiencePickerOptions($request),
+            'classes' => $parentReadOnly
+                ? []
+                : $this->clubQuery(AcademyClass::class, $request)
+                    ->orderBy('name')
+                    ->get(['id', 'name', 'sport']),
+            'sports' => $parentReadOnly
+                ? []
+                : $this->clubQuery(Sport::class, $request)
+                    ->orderBy('name')
+                    ->pluck('name')
+                    ->values(),
+            'audienceOptions' => $parentReadOnly ? [] : $this->audiencePickerOptions($request),
             'clubName' => $clubName,
+            'parentReadOnly' => $parentReadOnly,
             'filters' => [
                 'q' => $q,
                 'status' => $status,
@@ -790,5 +840,41 @@ class AnnouncementController extends Controller
 
         $role = (string) ($user->roleInClub($user->activeClub) ?? '');
         abort_if($role === 'parent', 403, 'Οι γονείς μπορούν μόνο να βλέπουν ανακοινώσεις.');
+    }
+
+    /**
+     * @param  array<string, mixed>  $audience
+     * @param  list<string>  $linkedAthleteIds
+     * @param  list<string>  $linkedClassIds
+     */
+    private function announcementVisibleToParent(
+        array $audience,
+        string $parentUserId,
+        array $linkedAthleteIds,
+        array $linkedClassIds,
+    ): bool {
+        $roles = array_values(array_map('strval', $audience['roles'] ?? []));
+        $parentIds = array_values(array_map('strval', $audience['parent_ids'] ?? []));
+        $athleteIds = array_values(array_map('strval', $audience['athlete_ids'] ?? []));
+        $classIds = array_values(array_map('strval', $audience['class_ids'] ?? []));
+
+        if ($parentIds !== []) {
+            return in_array($parentUserId, $parentIds, true);
+        }
+
+        $roleOk = $roles === [] || in_array('parent', $roles, true) || in_array('athlete', $roles, true);
+        if (! $roleOk) {
+            return false;
+        }
+
+        if ($athleteIds !== []) {
+            return array_intersect($athleteIds, $linkedAthleteIds) !== [];
+        }
+
+        if ($classIds !== []) {
+            return array_intersect($classIds, $linkedClassIds) !== [];
+        }
+
+        return true;
     }
 }
