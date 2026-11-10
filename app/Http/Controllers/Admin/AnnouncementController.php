@@ -20,6 +20,7 @@ use App\Support\PreferredNotifyEmail;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -62,87 +63,105 @@ class AnnouncementController extends Controller
                 ->unique()
                 ->values()
                 ->all();
-            $status = 'published';
+            // Do not force SQL published_at filter — restored TeamSuite rows often have null published_at.
+            $status = '';
         }
 
-        $items = $this->clubQuery(Announcement::class, $request)
-            ->with(['creator:id,name'])
-            ->when($q !== '', function ($builder) use ($q) {
-                $like = '%'.$q.'%';
-                $op = config('database.default') === 'pgsql' ? 'ilike' : 'like';
-                $builder->where(function ($w) use ($like, $op) {
-                    $w->where('title', $op, $like)->orWhere('body', $op, $like);
-                });
-            })
-            ->when($status === 'published', fn ($b) => $b->whereNotNull('published_at'))
-            ->when($status === 'draft', fn ($b) => $b->whereNull('published_at'))
-            ->when($role !== '', function ($builder) use ($role) {
-                $builder->where(function ($w) use ($role) {
-                    $w->where('audience', 'like', '%"'.$role.'"%')
-                        ->orWhereNull('audience');
-                });
-            })
-            ->orderByRaw('COALESCE(published_at, created_at) DESC')
-            ->orderByDesc('created_at')
-            ->orderByDesc('id')
-            ->paginate(5)
-            ->withQueryString()
-            ->through(function (Announcement $a) use ($clubName) {
-                $body = $a->displayBody();
-                $plain = trim(preg_replace('/\s+/u', ' ', strip_tags($body)) ?? '');
-                $audience = $a->displayAudience();
-                $status = strtolower((string) ($a->meta['status'] ?? ''));
-                $isPublished = $a->published_at !== null;
-                if (! $isPublished && $status === 'published') {
-                    $isPublished = true;
-                }
-                if ($status === 'draft') {
-                    $isPublished = false;
-                }
+        $serialize = function (Announcement $a) use ($clubName): array {
+            $body = $a->displayBody();
+            $plain = trim(preg_replace('/\s+/u', ' ', strip_tags($body)) ?? '');
+            $audience = $a->displayAudience();
+            $metaStatus = strtolower((string) ($a->meta['status'] ?? ''));
+            $isPublished = $a->isEffectivelyPublished();
+            if ($metaStatus === 'draft') {
+                $isPublished = false;
+            }
 
-                $publishedAt = optional($a->published_at)->toIso8601String();
-                if (! $publishedAt && $isPublished) {
-                    $visibleFrom = $a->meta['visibleFrom'] ?? null;
-                    $publishedAt = is_string($visibleFrom) && $visibleFrom !== ''
-                        ? $visibleFrom
-                        : optional($a->created_at)->toIso8601String();
-                }
+            $publishedAt = optional($a->published_at)->toIso8601String();
+            if (! $publishedAt && $isPublished) {
+                $visibleFrom = $a->meta['visibleFrom'] ?? null;
+                $publishedAt = is_string($visibleFrom) && $visibleFrom !== ''
+                    ? $visibleFrom
+                    : optional($a->created_at)->toIso8601String();
+            }
 
-                return [
-                    'id' => $a->id,
-                    'title' => $a->title,
-                    'body' => $body,
-                    'body_preview' => mb_strlen($plain) > 90 ? mb_substr($plain, 0, 90).'…' : $plain,
-                    'audience' => $audience,
-                    'published_at' => $publishedAt,
-                    'is_published' => $isPublished,
-                    'updated_at' => optional($a->updated_at)->toIso8601String(),
-                    'email_stats' => $a->emailStats(),
-                    'image_url' => $a->imageUrl(),
-                    'created_by_name' => $a->creatorDisplayName($clubName),
-                    'priority' => $a->meta['priority']
-                        ?? (! empty($a->meta['highPriority']) ? 'high' : 'normal'),
-                ];
-            });
+            return [
+                'id' => $a->id,
+                'title' => $a->title,
+                'body' => $body,
+                'body_preview' => mb_strlen($plain) > 90 ? mb_substr($plain, 0, 90).'…' : $plain,
+                'audience' => $audience,
+                'published_at' => $publishedAt,
+                'is_published' => $isPublished,
+                'updated_at' => optional($a->updated_at)->toIso8601String(),
+                'email_stats' => $a->emailStats(),
+                'image_url' => $a->imageUrl(),
+                'created_by_name' => $a->creatorDisplayName($clubName),
+                'priority' => $a->meta['priority']
+                    ?? (! empty($a->meta['highPriority']) ? 'high' : 'normal'),
+            ];
+        };
 
-        if ($parentReadOnly) {
+        if ($parentReadOnly && $user) {
             $parentUserId = (string) $user->id;
-            $items->setCollection(
-                $items->getCollection()->filter(function (array $row) use (
+            $parentEmail = (string) ($user->email ?? '');
+            $page = max(1, (int) $request->query('page', 1));
+            $visible = $this->clubQuery(Announcement::class, $request)
+                ->with(['creator:id,name'])
+                ->when($q !== '', function ($builder) use ($q) {
+                    $like = '%'.$q.'%';
+                    $op = config('database.default') === 'pgsql' ? 'ilike' : 'like';
+                    $builder->where(function ($w) use ($like, $op) {
+                        $w->where('title', $op, $like)->orWhere('body', $op, $like);
+                    });
+                })
+                ->orderByRaw('COALESCE(published_at, created_at) DESC')
+                ->orderByDesc('created_at')
+                ->orderByDesc('id')
+                ->limit(200)
+                ->get()
+                ->filter(fn (Announcement $a) => $a->isVisibleToParent(
                     $parentUserId,
+                    $parentEmail,
                     $parentLinkedAthleteIds,
                     $parentLinkedClassIds,
-                ): bool {
-                    $audience = is_array($row['audience'] ?? null) ? $row['audience'] : [];
+                ))
+                ->values();
 
-                    return $this->announcementVisibleToParent(
-                        $audience,
-                        $parentUserId,
-                        $parentLinkedAthleteIds,
-                        $parentLinkedClassIds,
-                    );
-                })->values()
+            $items = new LengthAwarePaginator(
+                $visible->forPage($page, 5)->values()->map($serialize),
+                $visible->count(),
+                5,
+                $page,
+                [
+                    'path' => $request->url(),
+                    'query' => $request->query(),
+                ]
             );
+        } else {
+            $items = $this->clubQuery(Announcement::class, $request)
+                ->with(['creator:id,name'])
+                ->when($q !== '', function ($builder) use ($q) {
+                    $like = '%'.$q.'%';
+                    $op = config('database.default') === 'pgsql' ? 'ilike' : 'like';
+                    $builder->where(function ($w) use ($like, $op) {
+                        $w->where('title', $op, $like)->orWhere('body', $op, $like);
+                    });
+                })
+                ->when($status === 'published', fn ($b) => $b->whereNotNull('published_at'))
+                ->when($status === 'draft', fn ($b) => $b->whereNull('published_at'))
+                ->when($role !== '', function ($builder) use ($role) {
+                    $builder->where(function ($w) use ($role) {
+                        $w->where('audience', 'like', '%"'.$role.'"%')
+                            ->orWhereNull('audience');
+                    });
+                })
+                ->orderByRaw('COALESCE(published_at, created_at) DESC')
+                ->orderByDesc('created_at')
+                ->orderByDesc('id')
+                ->paginate(5)
+                ->withQueryString()
+                ->through($serialize);
         }
 
         return Inertia::render('Admin/Announcements/Index', [
@@ -840,41 +859,5 @@ class AnnouncementController extends Controller
 
         $role = (string) ($user->roleInClub($user->activeClub) ?? '');
         abort_if($role === 'parent', 403, 'Οι γονείς μπορούν μόνο να βλέπουν ανακοινώσεις.');
-    }
-
-    /**
-     * @param  array<string, mixed>  $audience
-     * @param  list<string>  $linkedAthleteIds
-     * @param  list<string>  $linkedClassIds
-     */
-    private function announcementVisibleToParent(
-        array $audience,
-        string $parentUserId,
-        array $linkedAthleteIds,
-        array $linkedClassIds,
-    ): bool {
-        $roles = array_values(array_map('strval', $audience['roles'] ?? []));
-        $parentIds = array_values(array_map('strval', $audience['parent_ids'] ?? []));
-        $athleteIds = array_values(array_map('strval', $audience['athlete_ids'] ?? []));
-        $classIds = array_values(array_map('strval', $audience['class_ids'] ?? []));
-
-        if ($parentIds !== []) {
-            return in_array($parentUserId, $parentIds, true);
-        }
-
-        $roleOk = $roles === [] || in_array('parent', $roles, true) || in_array('athlete', $roles, true);
-        if (! $roleOk) {
-            return false;
-        }
-
-        if ($athleteIds !== []) {
-            return array_intersect($athleteIds, $linkedAthleteIds) !== [];
-        }
-
-        if ($classIds !== []) {
-            return array_intersect($classIds, $linkedClassIds) !== [];
-        }
-
-        return true;
     }
 }

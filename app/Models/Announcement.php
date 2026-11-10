@@ -184,4 +184,94 @@ class Announcement extends Model
 
         return $club !== '' ? $club : 'Διαχειριστής';
     }
+
+    /**
+     * Legacy TeamSuite imports often leave published_at null while still being live.
+     */
+    public function isEffectivelyPublished(): bool
+    {
+        $meta = is_array($this->meta) ? $this->meta : [];
+        $status = strtolower(trim((string) ($meta['status'] ?? '')));
+        if ($status === 'draft') {
+            return false;
+        }
+
+        if ($this->published_at !== null || $status === 'published') {
+            return true;
+        }
+
+        $stats = $this->emailStats();
+        if ($stats && (($stats['sentCount'] ?? 0) > 0 || ($stats['recipients'] ?? []) !== [])) {
+            return true;
+        }
+
+        // Restored TeamSuite rows keep markers in meta even when published_at was lost.
+        return ! empty($meta['created_by_name'])
+            || ! empty($meta['email_stats'])
+            || ! empty($meta['emailStats'])
+            || ! empty($meta['targetType'])
+            || ! empty($meta['showTo']);
+    }
+
+    /**
+     * @param  list<string>  $linkedAthleteIds
+     * @param  list<string>  $linkedClassIds
+     */
+    public function isVisibleToParent(
+        string $parentUserId,
+        ?string $parentEmail,
+        array $linkedAthleteIds,
+        array $linkedClassIds,
+    ): bool {
+        if (! $this->isEffectivelyPublished()) {
+            return false;
+        }
+
+        $email = strtolower(trim((string) $parentEmail));
+        if ($email !== '') {
+            $stats = $this->emailStats();
+            foreach ($stats['recipients'] ?? [] as $recipient) {
+                if (! is_array($recipient)) {
+                    continue;
+                }
+                $recipientEmail = strtolower(trim((string) ($recipient['email'] ?? '')));
+                if ($recipientEmail !== '' && $recipientEmail === $email) {
+                    return true;
+                }
+            }
+        }
+
+        $audience = $this->displayAudience();
+        $roles = array_values(array_map(
+            static fn (string $role): string => match (strtolower($role)) {
+                'parents' => 'parent',
+                'athletes' => 'athlete',
+                'coaches' => 'coach',
+                default => strtolower($role),
+            },
+            array_map('strval', $audience['roles'] ?? []),
+        ));
+        $parentIds = array_values(array_map('strval', $audience['parent_ids'] ?? []));
+        $athleteIds = array_values(array_map('strval', $audience['athlete_ids'] ?? []));
+        $classIds = array_values(array_map('strval', $audience['class_ids'] ?? []));
+
+        if ($parentIds !== []) {
+            return in_array($parentUserId, $parentIds, true);
+        }
+
+        $roleOk = $roles === [] || in_array('parent', $roles, true) || in_array('athlete', $roles, true);
+        if (! $roleOk) {
+            return false;
+        }
+
+        if ($athleteIds !== []) {
+            return array_intersect($athleteIds, $linkedAthleteIds) !== [];
+        }
+
+        if ($classIds !== []) {
+            return array_intersect($classIds, $linkedClassIds) !== [];
+        }
+
+        return true;
+    }
 }

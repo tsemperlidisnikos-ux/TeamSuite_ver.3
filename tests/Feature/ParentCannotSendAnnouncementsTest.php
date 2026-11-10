@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AcademyClass;
 use App\Models\Announcement;
 use App\Models\Athlete;
 use App\Models\Club;
@@ -176,6 +177,61 @@ class ParentCannotSendAnnouncementsTest extends TestCase
                 ->component('Portals/ParentHome')
                 ->has('announcements', 1)
                 ->where('announcements.0.title', 'Προβολή γονέα')
+            );
+    }
+
+    public function test_parent_sees_restored_teamsuite_announcements_with_null_published_at(): void
+    {
+        ['parentUser' => $user, 'club' => $club, 'athlete' => $athlete] = $this->seedParent();
+
+        $class = AcademyClass::query()->withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(),
+            'club_id' => $club->id,
+            'name' => 'U12',
+            'sport' => 'Ποδόσφαιρο',
+        ]);
+        $class->athletes()->attach($athlete->id, ['is_primary' => true]);
+
+        Announcement::query()->withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(),
+            'club_id' => $club->id,
+            'created_by' => null,
+            'title' => 'Νέος τρόπος ενημέρωσης',
+            'body' => 'Κείμενο από restore',
+            'audience' => [
+                'roles' => [],
+                'class_ids' => [$class->id],
+                'parent_ids' => [],
+                'athlete_ids' => [],
+                'coach_ids' => [],
+                'staff_ids' => [],
+                'sport' => '',
+            ],
+            'published_at' => null,
+            'meta' => [
+                'created_by_name' => 'ΑΚΑΔΗΜΙΑ',
+                'email_stats' => [
+                    'sentCount' => 1,
+                    'failedCount' => 0,
+                    'recipients' => [
+                        [
+                            'email' => $user->email,
+                            'status' => 'sent',
+                            'sentAt' => now()->toIso8601String(),
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('admin.announcements.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Announcements/Index')
+                ->where('parentReadOnly', true)
+                ->has('items.data', 1)
+                ->where('items.data.0.title', 'Νέος τρόπος ενημέρωσης')
             );
     }
 }

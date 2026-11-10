@@ -87,13 +87,29 @@ class ParentPortalController extends Controller
             : null;
         $readyProviders = $this->checkouts->readyProviders($settings);
 
+        $linkedAthleteIds = $athletes->pluck('id')->map(fn ($id) => (string) $id)->all();
+        $linkedClassIds = $athletes
+            ->flatMap(fn (Athlete $a) => $a->classes->pluck('id'))
+            ->map(fn ($id) => (string) $id)
+            ->unique()
+            ->values()
+            ->all();
+
         $announcements = $clubId
             ? Announcement::query()
                 ->withoutGlobalScope(ClubScope::class)
                 ->where('club_id', $clubId)
-                ->latest('published_at')
-                ->limit(20)
-                ->get(['id', 'title', 'body', 'published_at', 'meta'])
+                ->orderByRaw('COALESCE(published_at, created_at) DESC')
+                ->limit(100)
+                ->get(['id', 'title', 'body', 'published_at', 'audience', 'meta', 'created_at'])
+                ->filter(fn (Announcement $a) => $a->isVisibleToParent(
+                    (string) $user->id,
+                    (string) ($user->email ?? ''),
+                    $linkedAthleteIds,
+                    $linkedClassIds,
+                ))
+                ->take(20)
+                ->values()
             : collect();
 
         return Inertia::render('Portals/ParentHome', [
@@ -113,7 +129,7 @@ class ParentPortalController extends Controller
                 'id' => $a->id,
                 'title' => $a->title,
                 'body' => $a->body,
-                'published_at' => optional($a->published_at)?->toIso8601String(),
+                'published_at' => optional($a->published_at ?? $a->created_at)?->toIso8601String(),
                 'image_url' => $a->imageUrl(),
             ])->values(),
             'summary' => [

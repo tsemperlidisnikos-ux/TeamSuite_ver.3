@@ -1497,12 +1497,17 @@ class TeamSuiteAppDataImporter
 
             $body = trim((string) ($row['body'] ?? $row['message'] ?? ''));
             $status = strtolower(trim((string) ($row['status'] ?? 'published')));
-            $publishedAt = $this->parseDate($row['publishedAt'] ?? null);
-            if (! $publishedAt instanceof Carbon && $status !== 'draft') {
-                $publishedAt = $this->parseDate($row['visibleFrom'] ?? $row['createdAt'] ?? null);
-            }
+            // TeamSuite often stores visibleFrom as "" — empty string must not block createdAt fallback.
+            $publishedAt = $this->firstParsableDate([
+                $row['publishedAt'] ?? null,
+                $row['visibleFrom'] ?? null,
+                $row['createdAt'] ?? null,
+                $row['created_at'] ?? null,
+            ]);
             if ($status === 'draft') {
                 $publishedAt = null;
+            } elseif (! $publishedAt instanceof Carbon) {
+                $publishedAt = now();
             }
 
             $createdByRaw = trim((string) ($row['createdBy'] ?? ''));
@@ -1561,11 +1566,30 @@ class TeamSuiteAppDataImporter
      */
     private function mapLegacyAnnouncementAudience(array $row): array
     {
+        $roleMap = [
+            'parents' => 'parent',
+            'parent' => 'parent',
+            'athletes' => 'athlete',
+            'athlete' => 'athlete',
+            'coaches' => 'coach',
+            'coach' => 'coach',
+            'staff' => 'staff',
+            'members' => 'member',
+            'member' => 'member',
+        ];
+
         if (isset($row['audience']) && is_array($row['audience']) && $row['audience'] !== []) {
             $existing = $row['audience'];
+            $roles = [];
+            foreach ($existing['roles'] ?? [] as $role) {
+                $key = strtolower(trim((string) $role));
+                if (isset($roleMap[$key])) {
+                    $roles[] = $roleMap[$key];
+                }
+            }
 
             return [
-                'roles' => array_values(array_map('strval', $existing['roles'] ?? [])),
+                'roles' => array_values(array_unique($roles)),
                 'class_ids' => array_values(array_filter(array_map(
                     fn ($id) => $this->resolveMap('classes', $id),
                     $existing['class_ids'] ?? $existing['classIds'] ?? []
@@ -1578,17 +1602,6 @@ class TeamSuiteAppDataImporter
             ];
         }
 
-        $roleMap = [
-            'parents' => 'parent',
-            'parent' => 'parent',
-            'athletes' => 'athlete',
-            'athlete' => 'athlete',
-            'coaches' => 'coach',
-            'coach' => 'coach',
-            'staff' => 'staff',
-            'members' => 'member',
-            'member' => 'member',
-        ];
         $roles = [];
         foreach ($row['audienceRoles'] ?? [] as $role) {
             $key = strtolower(trim((string) $role));
@@ -2090,6 +2103,24 @@ class TeamSuiteAppDataImporter
         } catch (\Throwable) {
             return $value;
         }
+    }
+
+    /**
+     * @param  list<mixed>  $candidates
+     */
+    private function firstParsableDate(array $candidates): ?Carbon
+    {
+        foreach ($candidates as $candidate) {
+            if ($candidate === null || $candidate === '') {
+                continue;
+            }
+            $parsed = $this->parseDate($candidate);
+            if ($parsed instanceof Carbon) {
+                return $parsed;
+            }
+        }
+
+        return null;
     }
 
     /**
