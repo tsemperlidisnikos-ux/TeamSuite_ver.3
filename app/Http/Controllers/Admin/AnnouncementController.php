@@ -31,6 +31,8 @@ class AnnouncementController extends Controller
 
     public function index(Request $request): Response
     {
+        $this->denyParentAnnouncementAccess($request);
+
         $q = trim((string) $request->query('q', ''));
         $status = (string) $request->query('status', '');
         $role = (string) $request->query('role', '');
@@ -125,6 +127,8 @@ class AnnouncementController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        $this->denyParentAnnouncementAccess($request);
+
         $data = $this->validated($request);
         $audience = $this->audienceFrom($data);
         $emails = $this->resolveAudienceEmails($request, $audience);
@@ -225,6 +229,8 @@ class AnnouncementController extends Controller
 
     public function update(Request $request, string $id): RedirectResponse
     {
+        $this->denyParentAnnouncementAccess($request);
+
         $data = $this->validated($request);
         $row = $this->clubQuery(Announcement::class, $request)->findOrFail($id);
         $audience = $this->audienceFrom($data);
@@ -328,6 +334,8 @@ class AnnouncementController extends Controller
 
     public function destroy(Request $request, string $id): RedirectResponse
     {
+        $this->denyParentAnnouncementAccess($request);
+
         $row = $this->clubQuery(Announcement::class, $request)->findOrFail($id);
         $title = $row->title;
         $this->deleteStoredImage($row->meta['image_path'] ?? null);
@@ -347,6 +355,8 @@ class AnnouncementController extends Controller
 
     public function resendFailed(Request $request, string $id): RedirectResponse
     {
+        $this->denyParentAnnouncementAccess($request);
+
         $row = $this->clubQuery(Announcement::class, $request)->findOrFail($id);
         $stats = $row->emailStats();
         $failedEmails = [];
@@ -769,5 +779,16 @@ class AnnouncementController extends Controller
     private function resolveNotifyEmail(Athlete $athlete): ?string
     {
         return PreferredNotifyEmail::resolvePrimary($athlete);
+    }
+
+    private function denyParentAnnouncementAccess(Request $request): void
+    {
+        $user = $request->user();
+        if (! $user) {
+            abort(403);
+        }
+
+        $role = (string) ($user->roleInClub($user->activeClub) ?? '');
+        abort_if($role === 'parent', 403, 'Οι γονείς μπορούν μόνο να βλέπουν ανακοινώσεις.');
     }
 }

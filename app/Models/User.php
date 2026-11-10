@@ -82,22 +82,27 @@ class User extends Authenticatable
             return [];
         }
 
+        $role = (string) ($membership->pivot->role ?? '');
+
         $raw = $membership->pivot->permissions ?? [];
         if (is_string($raw)) {
             $raw = json_decode($raw, true) ?: [];
         }
 
         if (is_array($raw) && $raw !== []) {
-            return array_values(array_unique(array_filter($raw, 'is_string')));
+            $permissions = array_values(array_unique(array_filter($raw, 'is_string')));
+
+            return $this->denyParentAnnouncementModule($role, $permissions);
         }
 
-        $role = (string) ($membership->pivot->role ?? '');
         $defaults = app(PlatformConfigService::class)->get()['clubRolePermissions'][$role] ?? [];
         if (! is_array($defaults)) {
             $defaults = [];
         }
 
-        return array_values(array_unique(array_filter($defaults, 'is_string')));
+        $permissions = array_values(array_unique(array_filter($defaults, 'is_string')));
+
+        return $this->denyParentAnnouncementModule($role, $permissions);
     }
 
     /**
@@ -119,5 +124,23 @@ class User extends Authenticatable
         }
 
         return $allowed;
+    }
+
+    /**
+     * Parents may only read announcements in the parent portal — never the send module.
+     *
+     * @param  list<string>  $permissions
+     * @return list<string>
+     */
+    private function denyParentAnnouncementModule(string $role, array $permissions): array
+    {
+        if ($role !== 'parent') {
+            return $permissions;
+        }
+
+        return array_values(array_filter(
+            $permissions,
+            static fn (string $module): bool => $module !== 'announcements',
+        ));
     }
 }

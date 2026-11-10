@@ -535,10 +535,18 @@ class SettingsController extends Controller
             }
         }
 
+        $permissions = array_values($data['permissions'] ?? []);
+        if ($data['role'] === 'parent') {
+            $permissions = array_values(array_filter(
+                $permissions,
+                static fn (string $module): bool => $module !== 'announcements',
+            ));
+        }
+
         $club->users()->syncWithoutDetaching([
             $user->id => [
                 'role' => $data['role'],
-                'permissions' => json_encode(array_values($data['permissions'] ?? [])),
+                'permissions' => json_encode($permissions),
                 'finance_own_entries_only' => $request->boolean('finance_own_entries_only'),
                 'is_active' => $request->has('is_active') ? $request->boolean('is_active') : true,
             ],
@@ -570,9 +578,17 @@ class SettingsController extends Controller
             UserPasswordVault::setPassword($user, $data['password']);
         }
 
+        $permissions = array_values($data['permissions'] ?? []);
+        if ($data['role'] === 'parent') {
+            $permissions = array_values(array_filter(
+                $permissions,
+                static fn (string $module): bool => $module !== 'announcements',
+            ));
+        }
+
         $club->users()->updateExistingPivot($user->id, [
             'role' => $data['role'],
-            'permissions' => json_encode(array_values($data['permissions'] ?? [])),
+            'permissions' => json_encode($permissions),
             'finance_own_entries_only' => $request->boolean('finance_own_entries_only'),
             'is_active' => $request->has('is_active') ? $request->boolean('is_active') : (bool) $user->pivot->is_active,
         ]);

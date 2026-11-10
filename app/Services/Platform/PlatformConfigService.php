@@ -296,7 +296,8 @@ class PlatformConfigService
             ],
             'staff' => ['dashboard', 'calendar'],
             'athlete' => ['dashboard', 'schedule', 'attendance', 'fees', 'announcements', 'settings'],
-            'parent' => ['dashboard', 'fees', 'announcements', 'settings'],
+            // Γονείς: μόνο προβολή ανακοινώσεων στο portal — χωρίς module αποστολής.
+            'parent' => ['dashboard', 'fees', 'settings'],
         ];
     }
 
