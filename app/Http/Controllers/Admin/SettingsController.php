@@ -20,6 +20,7 @@ use App\Models\Sport;
 use App\Models\User;
 use App\Services\Mail\ClubSmtpMailer;
 use App\Services\Platform\PlatformConfigService;
+use App\Support\ClubSetupWizard;
 use App\Support\Navigation;
 use App\Support\Roles;
 use App\Support\UserPasswordVault;
@@ -76,6 +77,15 @@ class SettingsController extends Controller
             $tab = 'club';
         }
 
+        $user = $request->user();
+        $canManageUsers = Roles::canManageClubUsers(
+            (bool) $user?->is_platform_admin,
+            $user?->roleInClub($club),
+        );
+        if ($tab === 'users' && ! $canManageUsers) {
+            $tab = 'club';
+        }
+
         $settings = $club->settings()->firstOrCreate(
             ['club_id' => $club->id],
             ['id' => (string) Str::uuid()]
@@ -88,9 +98,15 @@ class SettingsController extends Controller
             ->where('status', '!=', 'inactive')
             ->count();
         $athleteCap = (int) ($club->licensePackage?->athlete_cap ?? 0);
+        $user = $request->user();
+        $canRunSetup = Roles::canRunClubSetup(
+            (bool) $user?->is_platform_admin,
+            $user?->roleInClub($club),
+        );
 
         return Inertia::render('Admin/Settings/Index', [
             'tab' => $tab,
+            'setupBanner' => ClubSetupWizard::bannerPayload($club, $settings, $canRunSetup),
             'club' => [
                 'id' => $club->id,
                 'name' => $club->name,
@@ -142,7 +158,8 @@ class SettingsController extends Controller
                 'data_retention_months' => (int) ($settings->data_retention_months ?? 24),
                 'dpa_accepted_at' => optional($settings->dpa_accepted_at)?->toIso8601String(),
             ],
-            'users' => $this->clubUsersPayload($club),
+            'users' => $canManageUsers ? $this->clubUsersPayload($club) : [],
+            'canManageUsers' => $canManageUsers,
             'roles' => collect(self::ROLES)
                 ->map(fn (string $role) => [
                     'id' => $role,
@@ -505,6 +522,7 @@ class SettingsController extends Controller
     public function storeUser(Request $request): RedirectResponse
     {
         $club = $this->clubModel($request);
+        $this->assertCanManageClubUsers($request, $club);
         $moduleIds = array_column(Navigation::academyModules(), 'id');
         $data = $request->validate([
             'name' => 'required|string|max:160',
@@ -556,6 +574,8 @@ class SettingsController extends Controller
 
     public function updateUser(Request $request, int $id): RedirectResponse
     {
+        $this->assertCanManageClubUsers($request, $this->clubModel($request));
+
         $club = $this->clubModel($request);
         $moduleIds = array_column(Navigation::academyModules(), 'id');
         $data = $request->validate([
@@ -595,6 +615,7 @@ class SettingsController extends Controller
     public function destroyUser(Request $request, int $id): RedirectResponse
     {
         $club = $this->clubModel($request);
+        $this->assertCanManageClubUsers($request, $club);
         abort_if($request->user()?->id === $id, 422, 'Δεν μπορείτε να αφαιρέσετε τον εαυτό σας.');
         $club->users()->detach($id);
 
@@ -859,6 +880,19 @@ class SettingsController extends Controller
         abort_unless($club instanceof Club, 403);
 
         return $club;
+    }
+
+    private function assertCanManageClubUsers(Request $request, Club $club): void
+    {
+        $user = $request->user();
+        abort_unless(
+            Roles::canManageClubUsers(
+                (bool) $user?->is_platform_admin,
+                $user?->roleInClub($club),
+            ),
+            403,
+            'Μόνο ο διαχειριστής συλλόγου μπορεί να διαχειρίζεται χρήστες.',
+        );
     }
 
     /**

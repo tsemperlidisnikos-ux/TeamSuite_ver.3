@@ -1,3 +1,4 @@
+import ClubSetupBanner from '@/Components/ClubSetupBanner';
 import AdminLayout from '@/Layouts/AdminLayout';
 import ClubUsersTab from '@/Pages/Admin/Settings/ClubUsersTab';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
@@ -41,9 +42,11 @@ function flattenSizes(chart) {
 
 export default function Index({
     tab,
+    setupBanner = null,
     club,
     settings,
     users,
+    canManageUsers = false,
     roles,
     permissionModules,
     roleDefaultPermissions,
@@ -59,6 +62,9 @@ export default function Index({
     const flash = usePage().props.flash;
     const [advancedOpen, setAdvancedOpen] = useState(
         MORE_TABS.some((t) => t.id === tab),
+    );
+    const primaryTabs = PRIMARY_TABS.filter((t) =>
+        t.id === 'users' ? canManageUsers : true,
     );
 
     const setTab = (id) => {
@@ -241,8 +247,10 @@ export default function Index({
                 βρίσκονται στα προχωρημένα.
             </p>
 
+            <ClubSetupBanner setupBanner={setupBanner} />
+
             <nav className="mb-2 flex flex-wrap gap-4 border-b border-ts-border">
-                {PRIMARY_TABS.map((t) => {
+                {primaryTabs.map((t) => {
                     const active =
                         tab === t.id ||
                         (t.id === 'payments' && ['viva', 'stripe', 'eurobank'].includes(tab));
@@ -445,7 +453,7 @@ export default function Index({
                 </form>
             )}
 
-            {tab === 'users' && (
+            {tab === 'users' && canManageUsers && (
                 <ClubUsersTab
                     users={users}
                     roles={roles}

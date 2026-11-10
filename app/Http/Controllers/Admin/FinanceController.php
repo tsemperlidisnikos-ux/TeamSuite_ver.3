@@ -71,8 +71,20 @@ class FinanceController extends Controller
             $expenseCategories[0] ?? 'ΑΓΩΝΕΣ',
         );
 
+        $user = $request->user();
+        $club = $request->attributes->get('currentClub') ?? $user?->activeClub;
+        $ownFinanceOnly = (bool) $user?->seesOnlyOwnFinanceEntries($club);
+
         $revenuesQuery = $this->clubQuery(Revenue::class, $request)->latest()->limit(10_000)->get();
         $expensesQuery = $this->clubQuery(Expense::class, $request)->latest()->limit(10_000)->get();
+        if ($ownFinanceOnly && $user) {
+            $revenuesQuery = $revenuesQuery
+                ->where(fn ($row) => (string) ($row->created_by ?? '') === (string) $user->id)
+                ->values();
+            $expensesQuery = $expensesQuery
+                ->where(fn ($row) => (string) ($row->created_by ?? '') === (string) $user->id)
+                ->values();
+        }
         $payments = AthleteTransaction::query()->withoutGlobalScopes()
             ->where('club_id', $clubId)
             ->where('type', 'payment')

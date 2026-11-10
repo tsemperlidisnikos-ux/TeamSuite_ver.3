@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\AttendanceController;
 use App\Http\Controllers\Admin\BackupRestoreController;
 use App\Http\Controllers\Admin\CalendarController;
 use App\Http\Controllers\Admin\ClubMemberController;
+use App\Http\Controllers\Admin\ClubSetupController;
 use App\Http\Controllers\Admin\CoachController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\FeeController;
@@ -59,7 +60,7 @@ Route::get('/', function () {
     return redirect()->route(ClubHome::routeName(auth()->user()));
 });
 
-Route::middleware(['auth', 'verified', 'club'])->group(function () {
+Route::middleware(['auth', 'verified', 'club', 'club.module'])->group(function () {
     Route::get('/dashboard', AdminDashboardController::class)->name('dashboard');
 
     // Athletes — full profile + import/export
@@ -183,6 +184,9 @@ Route::middleware(['auth', 'verified', 'club'])->group(function () {
     Route::get('/admin/finance/balance/export', [FinanceController::class, 'exportBalance'])->name('admin.finance.balance.export');
 
     Route::get('/admin/prints', [PrintController::class, 'index'])->name('admin.prints.index');
+
+    Route::get('/admin/setup/wizard', [ClubSetupController::class, 'index'])->name('admin.setup.wizard');
+    Route::post('/admin/setup/wizard', [ClubSetupController::class, 'update'])->name('admin.setup.wizard.update');
 
     Route::get('/admin/settings', [SettingsController::class, 'index'])->name('admin.settings.index');
     Route::post('/admin/settings/club', [SettingsController::class, 'updateClub'])->name('admin.settings.club.update');

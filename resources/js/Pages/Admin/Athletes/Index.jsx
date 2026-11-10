@@ -14,8 +14,19 @@ export default function Index({
     classes,
     healthNoticeRows = [],
     pendingApplications = [],
+    capabilities = {},
 }) {
     const flash = usePage().props.flash;
+    const caps = {
+        isDoctor: false,
+        isCoach: false,
+        canAmka: false,
+        canBulkEdit: false,
+        canImportExport: false,
+        canManageJoinForms: false,
+        canCreate: true,
+        ...capabilities,
+    };
     const [selected, setSelected] = useState([]);
     const [showCreate, setShowCreate] = useState(false);
     const [bulkOpen, setBulkOpen] = useState(false);
@@ -24,6 +35,27 @@ export default function Index({
     const [healthNoticeBusy, setHealthNoticeBusy] = useState(false);
     const [filtersCollapsed, setFiltersCollapsed] = useState(false);
     const [importHelpOpen, setImportHelpOpen] = useState(false);
+    const [joinFormApp, setJoinFormApp] = useState(null);
+
+    const approveApplication = (appId, force = false) => {
+        router.post(
+            route('admin.athletes.applications.approve', appId),
+            { force: force ? 1 : 0 },
+            {
+                preserveScroll: true,
+                onError: (errors) => {
+                    const msg =
+                        errors?.force ||
+                        errors?.conflicts ||
+                        'Υπάρχει πιθανό διπλότυπο. Να γίνει έγκριση οπωσδήποτε;';
+                    const text = Array.isArray(msg) ? msg.join('\n') : String(msg);
+                    if (window.confirm(text)) {
+                        approveApplication(appId, true);
+                    }
+                },
+            },
+        );
+    };
 
     const btnSecondary =
         'inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50';
@@ -164,17 +196,21 @@ export default function Index({
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    <button
-                        type="button"
-                        onClick={openBulk}
-                        disabled={bulkCount === 0}
-                        className={btnSecondary}
-                    >
-                        <span aria-hidden>✎</span> Μαζική αλλαγή
-                    </button>
-                    <button type="button" onClick={() => setShowCreate((v) => !v)} className={btnPrimary}>
-                        + Νέος αθλητής
-                    </button>
+                    {caps.canBulkEdit ? (
+                        <button
+                            type="button"
+                            onClick={openBulk}
+                            disabled={bulkCount === 0}
+                            className={btnSecondary}
+                        >
+                            <span aria-hidden>✎</span> Μαζική αλλαγή
+                        </button>
+                    ) : null}
+                    {caps.canCreate ? (
+                        <button type="button" onClick={() => setShowCreate((v) => !v)} className={btnPrimary}>
+                            + Νέος αθλητής
+                        </button>
+                    ) : null}
                 </div>
             </div>
 
@@ -353,17 +389,13 @@ export default function Index({
                                                 >
                                                     Αποθήκευση αλλαγών
                                                 </button>
-                                                <Link
-                                                    href={route(
-                                                        'admin.athletes.applications.approve',
-                                                        app.id,
-                                                    )}
-                                                    method="post"
-                                                    as="button"
+                                                <button
+                                                    type="button"
+                                                    onClick={() => approveApplication(app.id)}
                                                     className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs text-white hover:bg-emerald-500"
                                                 >
                                                     Έγκριση
-                                                </Link>
+                                                </button>
                                                 <button
                                                     type="button"
                                                     onClick={cancelEditApp}
@@ -407,6 +439,15 @@ export default function Index({
                                                 </div>
                                             </div>
                                             <div className="flex flex-wrap gap-2">
+                                                {app.join_form_url ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setJoinFormApp(app)}
+                                                        className="rounded-md border border-ts-border px-2.5 py-1 text-xs text-ts-fg-soft hover:bg-ts-hover"
+                                                    >
+                                                        Φόρμα εγγραφής
+                                                    </button>
+                                                ) : null}
                                                 <button
                                                     type="button"
                                                     onClick={() => startEditApp(app)}
@@ -414,17 +455,13 @@ export default function Index({
                                                 >
                                                     Επεξεργασία
                                                 </button>
-                                                <Link
-                                                    href={route(
-                                                        'admin.athletes.applications.approve',
-                                                        app.id,
-                                                    )}
-                                                    method="post"
-                                                    as="button"
+                                                <button
+                                                    type="button"
+                                                    onClick={() => approveApplication(app.id)}
                                                     className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs text-white hover:bg-emerald-500"
                                                 >
                                                     Έγκριση
-                                                </Link>
+                                                </button>
                                                 <Link
                                                     href={route(
                                                         'admin.athletes.applications.reject',
@@ -509,44 +546,50 @@ export default function Index({
                             <option value="inactive">Ανενεργός</option>
                         </select>
                     </label>
-                    <button
-                        type="button"
-                        onClick={openBulk}
-                        disabled={bulkCount === 0}
-                        className={btnSecondary}
-                    >
-                        <span aria-hidden>✎</span> Μαζική αλλαγή
-                        {bulkCount > 0 ? ` (${bulkCount})` : ''}
-                    </button>
-                    <a
-                        href={route('admin.athletes.export', {
-                            status: filters.status || undefined,
-                            sport: filters.sport || undefined,
-                            class_id: filters.class_id || undefined,
-                            q: filters.q || undefined,
-                        })}
-                        className={btnSecondary}
-                    >
-                        ↓ Εξαγωγή
-                    </a>
-                    <label className={`${btnSecondary} cursor-pointer`}>
-                        ↑ Εισαγωγή
-                        <input
-                            type="file"
-                            accept=".csv,.xlsx,text/csv"
-                            className="hidden"
-                            onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (!file) return;
-                                const data = new FormData();
-                                data.append('file', file);
-                                router.post(route('admin.athletes.import'), data, {
-                                    forceFormData: true,
-                                });
-                                e.target.value = '';
-                            }}
-                        />
-                    </label>
+                    {caps.canBulkEdit ? (
+                        <button
+                            type="button"
+                            onClick={openBulk}
+                            disabled={bulkCount === 0}
+                            className={btnSecondary}
+                        >
+                            <span aria-hidden>✎</span> Μαζική αλλαγή
+                            {bulkCount > 0 ? ` (${bulkCount})` : ''}
+                        </button>
+                    ) : null}
+                    {caps.canImportExport ? (
+                        <>
+                            <a
+                                href={route('admin.athletes.export', {
+                                    status: filters.status || undefined,
+                                    sport: filters.sport || undefined,
+                                    class_id: filters.class_id || undefined,
+                                    q: filters.q || undefined,
+                                })}
+                                className={btnSecondary}
+                            >
+                                ↓ Εξαγωγή
+                            </a>
+                            <label className={`${btnSecondary} cursor-pointer`}>
+                                ↑ Εισαγωγή
+                                <input
+                                    type="file"
+                                    accept=".csv,.xlsx,text/csv"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (!file) return;
+                                        const data = new FormData();
+                                        data.append('file', file);
+                                        router.post(route('admin.athletes.import'), data, {
+                                            forceFormData: true,
+                                        });
+                                        e.target.value = '';
+                                    }}
+                                />
+                            </label>
+                        </>
+                    ) : null}
                     <button
                         type="button"
                         className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-300 bg-slate-100 text-slate-600 hover:bg-slate-200"
@@ -709,19 +752,28 @@ export default function Index({
                 <table className="min-w-full text-sm">
                     <thead className="sticky top-0 z-10 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
                         <tr>
-                            <th className="w-10 px-3 py-2.5">
-                                <input
-                                    type="checkbox"
-                                    checked={allSelected}
-                                    onChange={toggleAll}
-                                    aria-label="Επιλογή όλων"
-                                />
-                            </th>
+                            {caps.canBulkEdit ? (
+                                <th className="w-10 px-3 py-2.5">
+                                    <input
+                                        type="checkbox"
+                                        checked={allSelected}
+                                        onChange={toggleAll}
+                                        aria-label="Επιλογή όλων"
+                                    />
+                                </th>
+                            ) : null}
                             <th className="px-3 py-2.5">Επώνυμο</th>
                             <th className="px-3 py-2.5">Όνομα</th>
                             <th className="px-3 py-2.5">Άθλημα</th>
                             <th className="px-3 py-2.5">Τμήμα</th>
-                            <th className="px-3 py-2.5">Γονέας</th>
+                            {caps.isDoctor ? (
+                                <>
+                                    <th className="px-3 py-2.5">ΑΜΚΑ</th>
+                                    <th className="px-3 py-2.5">Κάρτα υγείας</th>
+                                </>
+                            ) : (
+                                <th className="px-3 py-2.5">Γονέας</th>
+                            )}
                             <th className="px-3 py-2.5">Κατάσταση</th>
                             <th className="px-3 py-2.5 text-right" />
                         </tr>
@@ -733,17 +785,19 @@ export default function Index({
                                 className="cursor-pointer border-t border-slate-100 hover:bg-slate-50/80"
                                 onClick={() => router.visit(route('admin.athletes.show', r.id))}
                             >
-                                <td
-                                    className="px-3 py-2.5"
-                                    onClick={(e) => e.stopPropagation()}
-                                >
-                                    <input
-                                        type="checkbox"
-                                        checked={selected.includes(r.id)}
-                                        onChange={() => toggleOne(r.id)}
-                                        aria-label={`Επιλογή ${r.last_name}`}
-                                    />
-                                </td>
+                                {caps.canBulkEdit ? (
+                                    <td
+                                        className="px-3 py-2.5"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={selected.includes(r.id)}
+                                            onChange={() => toggleOne(r.id)}
+                                            aria-label={`Επιλογή ${r.last_name}`}
+                                        />
+                                    </td>
+                                ) : null}
                                 <td className="px-3 py-2.5">
                                     <div className="flex items-center gap-2.5">
                                         {r.photo_url ? (
@@ -777,7 +831,7 @@ export default function Index({
                                     >
                                         {r.first_name}
                                     </Link>
-                                    {r.email ? (
+                                    {!caps.isDoctor && r.email ? (
                                         <div className="text-xs text-slate-500">{r.email}</div>
                                     ) : null}
                                 </td>
@@ -785,14 +839,25 @@ export default function Index({
                                 <td className="px-3 py-2.5 text-slate-700">
                                     {r.class_names || '—'}
                                 </td>
-                                <td className="px-3 py-2.5">
-                                    <div className="text-slate-800">{r.guardian_name || '—'}</div>
-                                    {r.guardian_phone ? (
-                                        <div className="text-xs text-slate-500">
-                                            {r.guardian_phone}
-                                        </div>
-                                    ) : null}
-                                </td>
+                                {caps.isDoctor ? (
+                                    <>
+                                        <td className="px-3 py-2.5 text-slate-700">
+                                            {r.amka || (r.amka_set ? '********' : '—')}
+                                        </td>
+                                        <td className="px-3 py-2.5 text-slate-700">
+                                            {r.health_card_expires || (r.health_card ? 'Ναι' : '—')}
+                                        </td>
+                                    </>
+                                ) : (
+                                    <td className="px-3 py-2.5">
+                                        <div className="text-slate-800">{r.guardian_name || '—'}</div>
+                                        {r.guardian_phone ? (
+                                            <div className="text-xs text-slate-500">
+                                                {r.guardian_phone}
+                                            </div>
+                                        ) : null}
+                                    </td>
+                                )}
                                 <td className="px-3 py-2.5">
                                     <span
                                         className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
@@ -810,35 +875,37 @@ export default function Index({
                                     className="px-3 py-2.5 text-right"
                                     onClick={(e) => e.stopPropagation()}
                                 >
-                                    <div className="flex justify-end gap-1">
-                                        <Link
-                                            href={`${route('admin.athletes.show', r.id)}?edit=1`}
-                                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-800"
-                                            title="Επεξεργασία"
-                                            aria-label="Επεξεργασία"
-                                        >
-                                            ✎
-                                        </Link>
-                                        <Link
-                                            href={route('admin.athletes.destroy', r.id)}
-                                            method="delete"
-                                            as="button"
-                                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-rose-50 hover:text-rose-600"
-                                            title="Διαγραφή"
-                                            aria-label="Διαγραφή"
-                                            onClick={(e) => {
-                                                if (
-                                                    !confirm(
-                                                        `Διαγραφή αθλητή ${r.last_name} ${r.first_name};`,
-                                                    )
-                                                ) {
-                                                    e.preventDefault();
-                                                }
-                                            }}
-                                        >
-                                            🗑
-                                        </Link>
-                                    </div>
+                                    {!caps.isDoctor ? (
+                                        <div className="flex justify-end gap-1">
+                                            <Link
+                                                href={`${route('admin.athletes.show', r.id)}?edit=1`}
+                                                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                                                title="Επεξεργασία"
+                                                aria-label="Επεξεργασία"
+                                            >
+                                                ✎
+                                            </Link>
+                                            <Link
+                                                href={route('admin.athletes.destroy', r.id)}
+                                                method="delete"
+                                                as="button"
+                                                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-rose-50 hover:text-rose-600"
+                                                title="Διαγραφή"
+                                                aria-label="Διαγραφή"
+                                                onClick={(e) => {
+                                                    if (
+                                                        !confirm(
+                                                            `Διαγραφή αθλητή ${r.last_name} ${r.first_name};`,
+                                                        )
+                                                    ) {
+                                                        e.preventDefault();
+                                                    }
+                                                }}
+                                            >
+                                                🗑
+                                            </Link>
+                                        </div>
+                                    ) : null}
                                 </td>
                             </tr>
                         ))}
@@ -853,6 +920,39 @@ export default function Index({
                 </table>
             </div>
             <p className="mt-3 text-xs text-ts-muted">Σύνολο {rows.total ?? rows.data?.length ?? 0}</p>
+
+            {joinFormApp ? (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-lg bg-white p-4 shadow-lg">
+                        <div className="mb-3 flex items-start justify-between gap-3">
+                            <div>
+                                <h3 className="text-lg font-semibold text-slate-900">
+                                    Φόρμα εγγραφής
+                                </h3>
+                                <p className="text-sm text-slate-500">
+                                    {joinFormApp.last_name} {joinFormApp.first_name}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                className={btnSecondary}
+                                onClick={() => setJoinFormApp(null)}
+                            >
+                                Κλείσιμο
+                            </button>
+                        </div>
+                        {joinFormApp.join_form_url ? (
+                            <img
+                                src={joinFormApp.join_form_url}
+                                alt="Φόρμα εγγραφής"
+                                className="max-h-[70vh] w-full object-contain"
+                            />
+                        ) : (
+                            <p className="text-sm text-slate-500">Δεν υπάρχει εικόνα φόρμας.</p>
+                        )}
+                    </div>
+                </div>
+            ) : null}
         </AdminLayout>
     );
 }

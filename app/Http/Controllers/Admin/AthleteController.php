@@ -14,6 +14,7 @@ use App\Models\AthleteTransaction;
 use App\Models\Attendance;
 use App\Models\ClothingPackage;
 use App\Models\Club;
+use App\Models\Coach;
 use App\Models\ProgressReport;
 use App\Models\RegistrationApplication;
 use App\Models\Scopes\ClubScope;
@@ -26,11 +27,14 @@ use App\Services\Gdpr\AmkaService;
 use App\Support\ClothingPackageIds;
 use App\Support\GreekGivenName;
 use App\Support\PreferredNotifyEmail;
+use App\Support\Roles;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -45,19 +49,39 @@ class AthleteController extends Controller
         $status = $request->query('status');
         $sport = trim((string) $request->query('sport', ''));
         $classId = $request->query('class_id');
+        $user = $request->user();
+        $club = $request->attributes->get('currentClub') ?? $user?->activeClub;
+        $clubRole = $user?->roleInClub($club);
+        $isPlatformAdmin = (bool) $user?->is_platform_admin;
+        $isDoctor = ! $isPlatformAdmin && $clubRole === Roles::DOCTOR;
+        $isCoach = ! $isPlatformAdmin && $clubRole === Roles::COACH;
+        $canAmka = Roles::canAccessAmka($isPlatformAdmin, $clubRole);
+        $canBulkEdit = Roles::canBulkEditAthletes($isPlatformAdmin);
+        $canManageJoinForms = Roles::canManageRegistrationForms($isPlatformAdmin, $clubRole);
+        $allowedClassIds = $this->coachClassIds($request);
 
         $query = $this->clubQuery(Athlete::class, $request)
             ->with(['classes:id,name']);
 
+        if ($isCoach && $allowedClassIds !== null) {
+            if ($allowedClassIds === []) {
+                $query->whereRaw('1 = 0');
+            } else {
+                $query->whereHas('classes', fn ($c) => $c->whereIn('academy_classes.id', $allowedClassIds));
+            }
+        }
+
         if ($q !== '') {
             $like = '%'.$q.'%';
             $op = config('database.default') === 'pgsql' ? 'ilike' : 'like';
-            $query->where(function ($w) use ($like, $op) {
+            $query->where(function ($w) use ($like, $op, $isDoctor) {
                 $w->where('first_name', $op, $like)
-                    ->orWhere('last_name', $op, $like)
-                    ->orWhere('email', $op, $like)
-                    ->orWhere('phone', $op, $like)
-                    ->orWhere('guardian_name', $op, $like);
+                    ->orWhere('last_name', $op, $like);
+                if (! $isDoctor) {
+                    $w->orWhere('email', $op, $like)
+                        ->orWhere('phone', $op, $like)
+                        ->orWhere('guardian_name', $op, $like);
+                }
             });
         }
 
@@ -79,22 +103,30 @@ class AthleteController extends Controller
         $rows = $query->orderBy('last_name')->orderBy('first_name')
             ->paginate(10_000)
             ->withQueryString()
-            ->through(fn (Athlete $a) => [
-                'id' => $a->id,
-                'first_name' => $a->first_name,
-                'last_name' => $a->last_name,
-                'email' => $a->email,
-                'phone' => $a->phone,
-                'guardian_name' => $a->guardian_name,
-                'guardian_phone' => $a->guardian_phone,
-                'photo_url' => $a->photo_url ?? data_get($a->meta, 'photo_url'),
-                'status' => $a->status,
-                'sport' => $a->sport,
-                'monthly_fee' => $a->monthly_fee,
-                'health_card' => $a->health_card,
-                'health_card_expires' => optional($a->health_card_expires)->format('Y-m-d'),
-                'class_names' => $a->classes->pluck('name')->implode(', '),
-            ]);
+            ->through(function (Athlete $a) use ($isDoctor, $canAmka) {
+                $row = [
+                    'id' => $a->id,
+                    'first_name' => $a->first_name,
+                    'last_name' => $a->last_name,
+                    'email' => $isDoctor ? null : $a->email,
+                    'phone' => $isDoctor ? null : $a->phone,
+                    'guardian_name' => $isDoctor ? null : $a->guardian_name,
+                    'guardian_phone' => $isDoctor ? null : $a->guardian_phone,
+                    'photo_url' => $a->photo_url ?? data_get($a->meta, 'photo_url'),
+                    'status' => $a->status,
+                    'sport' => $a->sport,
+                    'monthly_fee' => $isDoctor ? null : $a->monthly_fee,
+                    'health_card' => $a->health_card,
+                    'health_card_expires' => optional($a->health_card_expires)->format('Y-m-d'),
+                    'class_names' => $a->classes->pluck('name')->implode(', '),
+                ];
+                if ($isDoctor || $canAmka) {
+                    $row['amka'] = $canAmka ? ($a->amka_encrypted ?: null) : null;
+                    $row['amka_set'] = filled($a->amka_encrypted);
+                }
+
+                return $row;
+            });
 
         $clubId = $this->clubId($request);
         $today = Carbon::today();
@@ -134,10 +166,17 @@ class AthleteController extends Controller
                 'email',
                 'phone',
                 'form_snapshot',
+                'signature_path',
                 'created_at',
             ])
-            ->map(function (RegistrationApplication $app) {
+            ->map(function (RegistrationApplication $app) use ($isCoach, $allowedClassIds) {
                 $snapshot = is_array($app->form_snapshot) ? $app->form_snapshot : [];
+                $appClassId = $snapshot['class_id'] ?? $snapshot['classId'] ?? null;
+                if ($isCoach && $allowedClassIds !== null) {
+                    if (! is_string($appClassId) || ! in_array($appClassId, $allowedClassIds, true)) {
+                        return null;
+                    }
+                }
 
                 return [
                     'id' => $app->id,
@@ -147,19 +186,26 @@ class AthleteController extends Controller
                     'last_name' => $app->last_name,
                     'email' => $app->email,
                     'phone' => $app->phone,
+                    'amka' => $snapshot['amka'] ?? $snapshot['AMKA'] ?? null,
                     'guardian_name' => $snapshot['guardian_name']
                         ?? $snapshot['guardianName']
                         ?? null,
                     'guardian_phone' => $snapshot['guardian_phone']
                         ?? $snapshot['guardianPhone']
                         ?? $app->phone,
-                    'class_id' => $snapshot['class_id']
-                        ?? $snapshot['classId']
-                        ?? null,
+                    'class_id' => $appClassId,
                     'notes' => $snapshot['notes'] ?? $snapshot['comments'] ?? null,
+                    'join_form_url' => $this->registrationFormImageUrl($app),
                     'created_at' => optional($app->created_at)->toIso8601String(),
                 ];
-            });
+            })
+            ->filter()
+            ->values();
+
+        $classesQuery = $this->clubQuery(AcademyClass::class, $request)->orderBy('name');
+        if ($isCoach && $allowedClassIds !== null) {
+            $classesQuery->whereIn('id', $allowedClassIds ?: ['']);
+        }
 
         return Inertia::render('Admin/Athletes/Index', [
             'rows' => $rows,
@@ -169,21 +215,34 @@ class AthleteController extends Controller
                 'sport' => $sport,
                 'class_id' => $classId ?: '',
             ],
-            'classes' => $this->clubQuery(AcademyClass::class, $request)
-                ->orderBy('name')
-                ->get(['id', 'name']),
+            'classes' => $classesQuery->get(['id', 'name']),
             'stats' => [
                 'active' => $this->clubQuery(Athlete::class, $request)->where('status', 'active')->count(),
                 'trial' => $this->clubQuery(Athlete::class, $request)->where('status', 'trial')->count(),
                 'inactive' => $this->clubQuery(Athlete::class, $request)->where('status', 'inactive')->count(),
             ],
-            'healthNoticeRows' => $healthNoticeRows,
-            'pendingApplications' => $pendingApplications,
+            'healthNoticeRows' => $isDoctor ? [] : $healthNoticeRows,
+            'pendingApplications' => $isDoctor ? [] : $pendingApplications,
+            'capabilities' => [
+                'isDoctor' => $isDoctor,
+                'isCoach' => $isCoach,
+                'canAmka' => $canAmka,
+                'canBulkEdit' => $canBulkEdit,
+                'canImportExport' => ! $isDoctor && ($isPlatformAdmin || in_array($clubRole, [Roles::ADMIN, Roles::SECRETARIAT], true)),
+                'canManageJoinForms' => $canManageJoinForms,
+                'canCreate' => ! $isDoctor,
+            ],
         ]);
     }
 
     public function bulkUpdate(Request $request): RedirectResponse
     {
+        abort_unless(
+            Roles::canBulkEditAthletes((bool) $request->user()?->is_platform_admin),
+            403,
+            'Η μαζική αλλαγή αθλητών είναι διαθέσιμη μόνο σε διαχειριστή πλατφόρμας.',
+        );
+
         $data = $request->validate([
             'ids' => 'required|array|min:1',
             'ids.*' => 'uuid',
@@ -239,8 +298,18 @@ class AthleteController extends Controller
             ->where('club_id', $clubId)
             ->findOrFail($id);
 
-        $status = ($app->type === 'trial') ? 'trial' : 'active';
+        $force = $request->boolean('force');
         $snapshot = is_array($app->form_snapshot) ? $app->form_snapshot : [];
+        $conflicts = $this->registrationIdentityConflicts($clubId, $app, $snapshot);
+        if ($conflicts !== [] && ! $force) {
+            throw ValidationException::withMessages([
+                'force' => $conflicts[0],
+                'requires_force' => true,
+                'conflicts' => $conflicts,
+            ]);
+        }
+
+        $status = ($app->type === 'trial') ? 'trial' : 'active';
 
         $athlete = Athlete::query()->withoutGlobalScopes()->create([
             'id' => (string) Str::uuid(),
@@ -386,6 +455,8 @@ class AthleteController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        $this->assertCanMutateAthletes($request);
+
         $data = $request->validate([
             'first_name' => 'required|string|max:120',
             'last_name' => 'required|string|max:120',
@@ -784,6 +855,8 @@ class AthleteController extends Controller
 
     public function export(Request $request, AthleteCsvService $csv): StreamedResponse
     {
+        $this->assertCanImportExportAthletes($request);
+
         $status = $request->query('status');
         $query = $this->clubQuery(Athlete::class, $request)->orderBy('last_name')->orderBy('first_name');
         if (in_array($status, ['active', 'inactive', 'trial'], true)) {
@@ -801,6 +874,8 @@ class AthleteController extends Controller
 
     public function import(Request $request, AthleteCsvService $csv): RedirectResponse
     {
+        $this->assertCanImportExportAthletes($request);
+
         $request->validate([
             'file' => 'required|file|mimes:csv,txt,text/csv|max:5120',
         ]);
@@ -825,8 +900,143 @@ class AthleteController extends Controller
 
     private function canAccessAmka(Request $request): bool
     {
-        // AMKA is visible/editable to every authenticated club user in the app.
-        return $request->user() !== null;
+        $user = $request->user();
+        if (! $user) {
+            return false;
+        }
+
+        $club = $request->attributes->get('currentClub') ?? $user->activeClub;
+
+        return Roles::canAccessAmka(
+            (bool) $user->is_platform_admin,
+            $user->roleInClub($club),
+        );
+    }
+
+    private function assertCanMutateAthletes(Request $request): void
+    {
+        $user = $request->user();
+        $club = $request->attributes->get('currentClub') ?? $user?->activeClub;
+        $role = $user?->roleInClub($club);
+        abort_if(
+            $role === Roles::DOCTOR && ! $user?->is_platform_admin,
+            403,
+            'Ο ιατρός έχει μόνο προβολή αθλητών.',
+        );
+    }
+
+    private function assertCanImportExportAthletes(Request $request): void
+    {
+        $user = $request->user();
+        $club = $request->attributes->get('currentClub') ?? $user?->activeClub;
+        abort_unless(
+            Roles::canManageRegistrationForms(
+                (bool) $user?->is_platform_admin,
+                $user?->roleInClub($club),
+            ),
+            403,
+            'Η εισαγωγή/εξαγωγή αθλητών είναι διαθέσιμη μόνο σε διαχειριστή ή γραμματεία.',
+        );
+    }
+
+    /**
+     * @return list<string>|null null = not a coach (no class scope)
+     */
+    private function coachClassIds(Request $request): ?array
+    {
+        $user = $request->user();
+        $club = $request->attributes->get('currentClub') ?? $user?->activeClub;
+        if (! $user || ! $club || $user->is_platform_admin) {
+            return null;
+        }
+        if ($user->roleInClub($club) !== Roles::COACH) {
+            return null;
+        }
+
+        $coach = Coach::query()->withoutGlobalScopes()
+            ->where('club_id', $club->id)
+            ->where(function ($q) use ($user) {
+                $q->where('user_id', $user->id)->orWhere('email', $user->email);
+            })
+            ->where('is_active', true)
+            ->first();
+
+        if (! $coach) {
+            return [];
+        }
+
+        return AcademyClass::query()->withoutGlobalScopes()
+            ->where('club_id', $club->id)
+            ->where('coach_id', $coach->id)
+            ->pluck('id')
+            ->map(fn ($id) => (string) $id)
+            ->all();
+    }
+
+    private function registrationFormImageUrl(RegistrationApplication $app): ?string
+    {
+        $snapshot = is_array($app->form_snapshot) ? $app->form_snapshot : [];
+        foreach (['formSnapshotUrl', 'form_snapshot_url', 'formImageUrl', 'form_image_url', 'joinFormImage'] as $key) {
+            $value = $snapshot[$key] ?? null;
+            if (is_string($value) && $value !== '') {
+                return $value;
+            }
+        }
+
+        if (is_string($app->signature_path) && $app->signature_path !== '') {
+            if (str_starts_with($app->signature_path, 'data:') || str_starts_with($app->signature_path, 'http')) {
+                return $app->signature_path;
+            }
+
+            return Storage::disk('public')->url($app->signature_path);
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $snapshot
+     * @return list<string>
+     */
+    private function registrationIdentityConflicts(string $clubId, RegistrationApplication $app, array $snapshot): array
+    {
+        $messages = [];
+        $amka = app(AmkaService::class)->normalize((string) ($snapshot['amka'] ?? $snapshot['AMKA'] ?? ''));
+        $fingerprint = app(AmkaService::class)->fingerprint($amka);
+        if (is_string($fingerprint) && $fingerprint !== '') {
+            $amkaHit = Athlete::query()->withoutGlobalScopes()
+                ->where('club_id', $clubId)
+                ->where('amka_fingerprint', $fingerprint)
+                ->first(['id', 'first_name', 'last_name']);
+            if ($amkaHit) {
+                $messages[] = 'Υπάρχει ήδη αθλητής με ίδιο ΑΜΚΑ: '
+                    .trim($amkaHit->last_name.' '.$amkaHit->first_name)
+                    .'. Επιβεβαιώστε για συνέχεια.';
+            }
+        }
+
+        $guardianPhone = preg_replace('/\D+/', '', (string) (
+            $snapshot['guardian_phone']
+            ?? $snapshot['guardianPhone']
+            ?? $app->phone
+            ?? ''
+        ));
+        if (is_string($guardianPhone) && strlen($guardianPhone) >= 8) {
+            $phoneHit = Athlete::query()->withoutGlobalScopes()
+                ->where('club_id', $clubId)
+                ->where(function ($q) use ($guardianPhone) {
+                    $q->where('guardian_phone', 'like', '%'.$guardianPhone.'%')
+                        ->orWhere('phone', 'like', '%'.$guardianPhone.'%');
+                })
+                ->first(['id', 'first_name', 'last_name']);
+            if ($phoneHit) {
+                $messages[] = 'Πιθανό διπλότυπο: υπάρχει ήδη αθλητής «'
+                    .trim($phoneHit->last_name.' '.$phoneHit->first_name)
+                    .'» με ίδιο τηλ. γονέα. Επιβεβαιώστε για συνέχεια.';
+            }
+        }
+
+        return $messages;
     }
 
     private function logChange(Request $request, Athlete $athlete, string $field, ?string $old, ?string $new): void

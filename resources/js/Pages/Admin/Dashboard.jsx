@@ -1,3 +1,4 @@
+import ClubSetupBanner from '@/Components/ClubSetupBanner';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { Head, Link } from '@inertiajs/react';
 
@@ -167,6 +168,7 @@ export default function Dashboard({
     doctor,
     showFinance = true,
     showRentals = true,
+    setupBanner = null,
 }) {
     if (view === 'doctor') {
         return <DoctorDashboard doctor={doctor} />;
@@ -190,6 +192,8 @@ export default function Dashboard({
                     {seasonName ? `Τρέχουσα σεζόν ${seasonName}` : 'Σύνοψη συλλόγου'}
                 </p>
             </div>
+
+            <ClubSetupBanner setupBanner={setupBanner} />
 
             {showRentals && uncollectedCount > 0 && (
                 <Link

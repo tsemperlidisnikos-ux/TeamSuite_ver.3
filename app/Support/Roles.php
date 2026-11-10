@@ -81,4 +81,54 @@ final class Roles
 
         return in_array($clubRole, [self::ADMIN, self::SECRETARIAT], true);
     }
+
+    public static function canAccessAmka(bool $isPlatformAdmin, ?string $clubRole): bool
+    {
+        if ($isPlatformAdmin) {
+            return true;
+        }
+
+        return in_array($clubRole, [self::ADMIN, self::SECRETARIAT, self::DOCTOR], true);
+    }
+
+    public static function canAccessMedical(bool $isPlatformAdmin, ?string $clubRole): bool
+    {
+        if ($isPlatformAdmin) {
+            return true;
+        }
+
+        return in_array($clubRole, [self::ADMIN, self::DOCTOR], true);
+    }
+
+    public static function canManageClubUsers(bool $isPlatformAdmin, ?string $clubRole): bool
+    {
+        if ($isPlatformAdmin) {
+            return true;
+        }
+
+        return $clubRole === self::ADMIN;
+    }
+
+    public static function canBulkEditAthletes(bool $isPlatformAdmin): bool
+    {
+        return $isPlatformAdmin;
+    }
+
+    public static function canManageRegistrationForms(bool $isPlatformAdmin, ?string $clubRole): bool
+    {
+        if ($isPlatformAdmin) {
+            return true;
+        }
+
+        return in_array($clubRole, [self::ADMIN, self::SECRETARIAT], true);
+    }
+
+    public static function canRunClubSetup(bool $isPlatformAdmin, ?string $clubRole): bool
+    {
+        if ($isPlatformAdmin) {
+            return true;
+        }
+
+        return in_array($clubRole, [self::ADMIN, self::SECRETARIAT], true);
+    }
 }

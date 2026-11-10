@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureClubContext;
+use App\Http\Middleware\EnsureClubModule;
 use App\Http\Middleware\EnsurePlatformAdmin;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Foundation\Application;
@@ -26,6 +27,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'club' => EnsureClubContext::class,
+            'club.module' => EnsureClubModule::class,
             'platform' => EnsurePlatformAdmin::class,
         ]);
 

@@ -120,6 +120,27 @@ class User extends Authenticatable
         return array_values(array_unique(array_intersect($clubModules, $this->permissionsInClub($club))));
     }
 
+    public function seesOnlyOwnFinanceEntries(?Club $club = null): bool
+    {
+        if ($this->is_platform_admin) {
+            return false;
+        }
+
+        $club ??= $this->activeClub;
+        if (! $club) {
+            return false;
+        }
+
+        $role = $this->roleInClub($club);
+        if (in_array($role, ['admin', 'doctor'], true)) {
+            return false;
+        }
+
+        $membership = $this->clubs()->where('clubs.id', $club->id)->first();
+
+        return (bool) ($membership?->pivot?->finance_own_entries_only);
+    }
+
     /**
      * Parents may view announcements (send is blocked in controllers/UI).
      *

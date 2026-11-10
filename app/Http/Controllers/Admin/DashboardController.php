@@ -5,13 +5,16 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Athlete;
 use App\Models\ClubSeason;
+use App\Models\ClubSetting;
 use App\Models\RegistrationApplication;
 use App\Models\RentalBooking;
 use App\Services\Admin\ClubDashboardMetrics;
 use App\Support\ClubHome;
+use App\Support\ClubSetupWizard;
 use App\Support\Roles;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -74,6 +77,17 @@ class DashboardController extends Controller
             ->where('is_active', true)
             ->first(['name']);
 
+        $canRunSetup = Roles::canRunClubSetup(
+            (bool) $user?->is_platform_admin,
+            $role,
+        );
+        $settings = $canRunSetup
+            ? $club->settings()->firstOrCreate(
+                ['club_id' => $club->id],
+                ['id' => (string) Str::uuid()]
+            )
+            : null;
+
         return Inertia::render('Admin/Dashboard', [
             'view' => 'admin',
             'club' => [
@@ -84,6 +98,9 @@ class DashboardController extends Controller
             'seasonName' => $season?->name,
             'showFinance' => $showFinance,
             'showRentals' => $showRentals,
+            'setupBanner' => $settings instanceof ClubSetting
+                ? ClubSetupWizard::bannerPayload($club, $settings, $canRunSetup)
+                : null,
             'kpis' => [
                 'activeAthletes' => (int) $activeAthletes,
                 'athleteCap' => $athleteCap,
