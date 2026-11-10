@@ -8,22 +8,32 @@ use App\Models\ClubSeason;
 use App\Models\RegistrationApplication;
 use App\Models\RentalBooking;
 use App\Services\Admin\ClubDashboardMetrics;
+use App\Support\ClubHome;
 use App\Support\Roles;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function __invoke(Request $request, ClubDashboardMetrics $metrics): Response
+    public function __invoke(Request $request, ClubDashboardMetrics $metrics): Response|RedirectResponse
     {
         $club = $request->attributes->get('currentClub')
             ?? $request->user()?->activeClub;
 
         abort_unless($club, 403);
 
+        $user = $request->user();
+        if (! ClubHome::canAccessDashboard($user)) {
+            $home = ClubHome::routeName($user);
+            abort_if($home === 'dashboard', 403, 'Δεν έχετε πρόσβαση στην επισκόπηση.');
+
+            return redirect()->route($home);
+        }
+
         $clubId = $club->id;
-        $role = $request->user()?->roleInClub($club);
+        $role = $user?->roleInClub($club);
 
         if ($role === Roles::DOCTOR) {
             return $this->doctorDashboard($request, $club);

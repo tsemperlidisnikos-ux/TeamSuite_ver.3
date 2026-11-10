@@ -61,4 +61,33 @@ class ParentDashboardPermissionTest extends TestCase
             fn ($item) => ($item['id'] ?? null) !== 'dashboard'
         ));
     }
+
+    public function test_parent_without_dashboard_is_redirected_away_from_overview(): void
+    {
+        $club = Club::query()->create([
+            'id' => (string) Str::uuid(),
+            'name' => 'Parent Redirect Club',
+            'slug' => 'parent-redir-'.Str::random(6),
+            'is_active' => true,
+        ]);
+
+        $parent = User::factory()->create([
+            'password' => Hash::make('password'),
+            'email_verified_at' => now(),
+            'active_club_id' => $club->id,
+        ]);
+        $parent->clubs()->attach($club->id, [
+            'role' => 'parent',
+            'is_active' => true,
+            'permissions' => json_encode(['fees', 'announcements', 'settings']),
+        ]);
+
+        $this->actingAs($parent)
+            ->get(route('dashboard'))
+            ->assertRedirect(route('admin.announcements.index'));
+
+        $this->actingAs($parent)
+            ->get('/')
+            ->assertRedirect(route('admin.announcements.index'));
+    }
 }

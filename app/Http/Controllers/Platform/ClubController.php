@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Club;
 use App\Models\LicensePackage;
 use App\Models\Scopes\ClubScope;
+use App\Support\ClubHome;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -91,7 +92,7 @@ class ClubController extends Controller
         $request->session()->forget('platform_preview_club_id');
 
         return redirect()
-            ->route('dashboard')
+            ->route(ClubHome::routeName($user->fresh(['activeClub'])))
             ->with('success', 'Ενεργός σύλλογος: '.$club->name);
     }
 

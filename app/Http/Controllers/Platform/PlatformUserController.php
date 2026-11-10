@@ -9,6 +9,7 @@ use App\Models\LoginActivity;
 use App\Models\User;
 use App\Services\Audit\ClubActivityLogger;
 use App\Services\Platform\PlatformConfigService;
+use App\Support\ClubHome;
 use App\Support\PersonNameSplitter;
 use App\Support\SimpleXlsxExporter;
 use App\Support\UserPasswordVault;
@@ -229,14 +230,10 @@ class PlatformUserController extends Controller
             'logged_in_at' => now(),
         ]);
 
-        $destination = $target->is_platform_admin
-            ? route('platform.dashboard')
-            : route('dashboard');
-
         $request->session()->flash('success', 'Είσοδος ως '.$target->name);
 
         // Full page visit so auth/session swap is applied cleanly in Inertia.
-        return Inertia::location($destination);
+        return Inertia::location(ClubHome::url($target->fresh(['activeClub'])));
     }
 
     public function leave(Request $request): RedirectResponse|SymfonyResponse

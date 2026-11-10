@@ -296,8 +296,8 @@ class PlatformConfigService
             ],
             'staff' => ['dashboard', 'calendar'],
             'athlete' => ['dashboard', 'schedule', 'attendance', 'fees', 'announcements', 'settings'],
-            // Γονείς: συνδρομές παιδιών + προβολή ανακοινώσεων (αποστολή μπλοκάρεται στον controller).
-            'parent' => ['dashboard', 'fees', 'announcements', 'settings'],
+            // Γονείς: συνδρομές παιδιών + προβολή ανακοινώσεων (χωρίς Επισκόπηση συλλόγου).
+            'parent' => ['fees', 'announcements', 'settings'],
         ];
     }
 

@@ -48,6 +48,7 @@ use App\Http\Controllers\Site\JoinController;
 use App\Http\Controllers\Site\LegalController;
 use App\Http\Controllers\Site\RentController;
 use App\Http\Controllers\Webhooks\PaymentWebhookController;
+use App\Support\ClubHome;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -55,9 +56,7 @@ Route::get('/', function () {
         return redirect()->route('login');
     }
 
-    return auth()->user()?->is_platform_admin
-        ? redirect()->route('platform.dashboard')
-        : redirect()->route('dashboard');
+    return redirect()->route(ClubHome::routeName(auth()->user()));
 });
 
 Route::middleware(['auth', 'verified', 'club'])->group(function () {
