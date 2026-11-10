@@ -117,13 +117,7 @@ class User extends Authenticatable
             return array_values($clubModules);
         }
 
-        $allowed = array_values(array_intersect($clubModules, $this->permissionsInClub($club)));
-
-        if ($allowed !== [] && ! in_array('dashboard', $allowed, true)) {
-            array_unshift($allowed, 'dashboard');
-        }
-
-        return $allowed;
+        return array_values(array_unique(array_intersect($clubModules, $this->permissionsInClub($club))));
     }
 
     /**

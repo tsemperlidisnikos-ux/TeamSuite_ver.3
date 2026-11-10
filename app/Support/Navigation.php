@@ -56,7 +56,7 @@ final class Navigation
                 if ($item['route'] === null) {
                     return null;
                 }
-                if ($enabled !== null && $item['id'] !== 'dashboard' && ! isset($enabled[$item['id']])) {
+                if ($enabled !== null && ! isset($enabled[$item['id']])) {
                     return null;
                 }
 

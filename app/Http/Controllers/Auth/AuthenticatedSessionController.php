@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Models\LoginActivity;
+use App\Services\Platform\PlatformConfigService;
+use App\Support\Navigation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -60,11 +62,27 @@ class AuthenticatedSessionController extends Controller
             return redirect()->route('portal.coach');
         }
 
-        $home = $user?->is_platform_admin
-            ? route('platform.dashboard', absolute: false)
-            : route('dashboard', absolute: false);
+        if ($user?->is_platform_admin) {
+            return redirect()->intended(route('platform.dashboard', absolute: false));
+        }
 
-        return redirect()->intended($home);
+        $club = $user?->activeClub;
+        $modules = $user && $club
+            ? $user->allowedModulesInClub(
+                app(PlatformConfigService::class)->modulesForClub($club->id),
+                $club,
+            )
+            : [];
+
+        if ($modules !== [] && ! in_array('dashboard', $modules, true)) {
+            $items = Navigation::adminItems($modules);
+            $first = $items[0]['route'] ?? null;
+            if (is_string($first) && $first !== '') {
+                return redirect()->intended(route($first, absolute: false));
+            }
+        }
+
+        return redirect()->intended(route('dashboard', absolute: false));
     }
 
     /**
