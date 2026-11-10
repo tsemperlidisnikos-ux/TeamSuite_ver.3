@@ -19,6 +19,7 @@ use App\Models\Training;
 use App\Services\Backup\TeamSuiteBackupParser;
 use App\Services\Backup\TeamSuiteBackupRestoreService;
 use App\Services\Backup\TeamSuiteClubExporter;
+use App\Support\Roles;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -59,6 +60,17 @@ class BackupRestoreController extends Controller
      */
     public function download(Request $request, TeamSuiteClubExporter $exporter): StreamedResponse
     {
+        $user = $request->user();
+        $club = $request->attributes->get('currentClub') ?? $user?->activeClub;
+        abort_unless(
+            Roles::canQuickClubBackup(
+                (bool) $user?->is_platform_admin,
+                $user?->roleInClub($club),
+            ),
+            403,
+            'Μόνο διαχειριστής πλατφόρμας, διαχειριστής συλλόγου ή γραμματεία μπορούν να κατεβάσουν backup.',
+        );
+
         $clubId = $this->clubId($request);
         $club = Club::query()->findOrFail($clubId);
         $payload = $exporter->export($club);

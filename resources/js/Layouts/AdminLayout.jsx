@@ -23,6 +23,9 @@ export default function AdminLayout({ title, children, compact = false }) {
 
     const items = navigation?.items || [];
     const isPlatformAdmin = auth?.user?.is_platform_admin;
+    const clubRole = auth?.user?.role || '';
+    const canQuickClubExport =
+        !!isPlatformAdmin || clubRole === 'admin' || clubRole === 'secretariat';
     const lowStock = Number(clubAlerts?.lowStock || 0);
     const pendingRegs = Number(clubAlerts?.pendingRegistrations || 0);
     const clubName = currentClub?.name || 'TeamSuite';
@@ -34,7 +37,7 @@ export default function AdminLayout({ title, children, compact = false }) {
     const roleLabel = auth?.user?.role_label || '';
 
     const handleClubLogoQuickExport = () => {
-        if (exportBusy) return;
+        if (!canQuickClubExport || exportBusy) return;
         setExportBusy(true);
         window.open(route('admin.settings.backup.download'), '_blank');
         window.open(route('admin.athletes.export'), '_blank');
@@ -49,21 +52,31 @@ export default function AdminLayout({ title, children, compact = false }) {
             >
                 <div className="border-b border-white/10 px-4 py-4">
                     {currentClub?.logo_url ? (
-                        <button
-                            type="button"
-                            onClick={handleClubLogoQuickExport}
-                            disabled={exportBusy}
-                            title="Λήψη backup συλλόγου (JSON) και εξαγωγή αθλητών (Excel)"
-                            aria-label="Λήψη backup συλλόγου (JSON) και εξαγωγή αθλητών (Excel)"
-                            className="flex w-full items-center justify-center rounded-md border border-white/10 bg-white/5 p-3 hover:bg-white/10 disabled:opacity-60"
-                        >
-                            <img
-                                src={currentClub.logo_url}
-                                alt={clubName}
-                                className="max-h-32 max-w-full object-contain"
-                            />
-                        </button>
-                    ) : (
+                        canQuickClubExport ? (
+                            <button
+                                type="button"
+                                onClick={handleClubLogoQuickExport}
+                                disabled={exportBusy}
+                                title="Λήψη backup συλλόγου (JSON) και εξαγωγή αθλητών (Excel)"
+                                aria-label="Λήψη backup συλλόγου (JSON) και εξαγωγή αθλητών (Excel)"
+                                className="flex w-full items-center justify-center rounded-md border border-white/10 bg-white/5 p-3 hover:bg-white/10 disabled:opacity-60"
+                            >
+                                <img
+                                    src={currentClub.logo_url}
+                                    alt={clubName}
+                                    className="max-h-32 max-w-full object-contain"
+                                />
+                            </button>
+                        ) : (
+                            <div className="flex w-full items-center justify-center rounded-md border border-white/10 bg-white/5 p-3">
+                                <img
+                                    src={currentClub.logo_url}
+                                    alt={clubName}
+                                    className="max-h-32 max-w-full object-contain"
+                                />
+                            </div>
+                        )
+                    ) : canQuickClubExport ? (
                         <Link
                             href={route('admin.settings.index')}
                             className="flex w-full flex-col items-center justify-center gap-1 rounded-md border border-dashed border-white/20 bg-white/5 px-3 py-5 text-center hover:bg-white/10"
@@ -76,12 +89,18 @@ export default function AdminLayout({ title, children, compact = false }) {
                                 Ανέβασμα από Ρυθμίσεις
                             </span>
                         </Link>
+                    ) : (
+                        <div className="flex w-full flex-col items-center justify-center gap-1 rounded-md border border-dashed border-white/20 bg-white/5 px-3 py-5 text-center">
+                            <span className="text-xs font-medium text-slate-300">
+                                Λογότυπο συλλόγου
+                            </span>
+                        </div>
                     )}
-                    {currentClub?.logo_url && (
+                    {currentClub?.logo_url && canQuickClubExport ? (
                         <div className="mt-1.5 text-center text-[10px] text-slate-500">
                             Κλικ στο λογότυπο → backup
                         </div>
-                    )}
+                    ) : null}
                 </div>
 
                 <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
@@ -142,6 +161,8 @@ export default function AdminLayout({ title, children, compact = false }) {
             items,
             currentClub,
             isPlatformAdmin,
+            canQuickClubExport,
+            clubRole,
             appVersion,
             clubAlerts,
             exportBusy,

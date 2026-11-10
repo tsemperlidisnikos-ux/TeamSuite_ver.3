@@ -1,0 +1,93 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\Club;
+use App\Models\User;
+use App\Support\Roles;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\DataProvider;
+use Tests\TestCase;
+
+class LogoBackupAccessTest extends TestCase
+{
+    use RefreshDatabase;
+
+    /**
+     * @return array{club: Club, user: User}
+     */
+    private function seedClubUser(string $role, bool $isPlatformAdmin = false): array
+    {
+        $club = Club::query()->create([
+            'id' => (string) Str::uuid(),
+            'name' => 'Logo Backup Club',
+            'slug' => 'logo-backup-'.Str::random(6),
+            'is_active' => true,
+        ]);
+
+        $user = User::factory()->create([
+            'password' => Hash::make('password'),
+            'email_verified_at' => now(),
+            'active_club_id' => $club->id,
+            'is_platform_admin' => $isPlatformAdmin,
+        ]);
+        $user->clubs()->attach($club->id, [
+            'role' => $role,
+            'is_active' => true,
+        ]);
+
+        return compact('club', 'user');
+    }
+
+    public static function allowedRolesProvider(): array
+    {
+        return [
+            'club admin' => [Roles::ADMIN, false],
+            'secretariat' => [Roles::SECRETARIAT, false],
+            'platform admin' => [Roles::ADMIN, true],
+        ];
+    }
+
+    public static function deniedRolesProvider(): array
+    {
+        return [
+            'parent' => [Roles::PARENT],
+            'coach' => [Roles::COACH],
+            'staff' => [Roles::STAFF],
+            'doctor' => [Roles::DOCTOR],
+            'athlete' => [Roles::ATHLETE],
+        ];
+    }
+
+    #[DataProvider('allowedRolesProvider')]
+    public function test_allowed_roles_can_download_club_backup(string $role, bool $isPlatformAdmin): void
+    {
+        ['user' => $user] = $this->seedClubUser($role, $isPlatformAdmin);
+
+        $this->actingAs($user)
+            ->get(route('admin.settings.backup.download'))
+            ->assertOk();
+    }
+
+    #[DataProvider('deniedRolesProvider')]
+    public function test_denied_roles_cannot_download_club_backup(string $role): void
+    {
+        ['user' => $user] = $this->seedClubUser($role);
+
+        $this->actingAs($user)
+            ->get(route('admin.settings.backup.download'))
+            ->assertForbidden();
+    }
+
+    public function test_can_quick_club_backup_helper_matches_allowed_roles(): void
+    {
+        $this->assertTrue(Roles::canQuickClubBackup(true, Roles::PARENT));
+        $this->assertTrue(Roles::canQuickClubBackup(false, Roles::ADMIN));
+        $this->assertTrue(Roles::canQuickClubBackup(false, Roles::SECRETARIAT));
+        $this->assertFalse(Roles::canQuickClubBackup(false, Roles::PARENT));
+        $this->assertFalse(Roles::canQuickClubBackup(false, Roles::COACH));
+        $this->assertFalse(Roles::canQuickClubBackup(false, null));
+    }
+}

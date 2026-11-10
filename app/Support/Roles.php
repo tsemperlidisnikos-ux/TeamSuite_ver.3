@@ -69,4 +69,16 @@ final class Roles
 
         return self::labels()[$role] ?? $role;
     }
+
+    /**
+     * Sidebar logo → club backup is limited to platform admin, club admin, secretariat.
+     */
+    public static function canQuickClubBackup(bool $isPlatformAdmin, ?string $clubRole): bool
+    {
+        if ($isPlatformAdmin) {
+            return true;
+        }
+
+        return in_array($clubRole, [self::ADMIN, self::SECRETARIAT], true);
+    }
 }

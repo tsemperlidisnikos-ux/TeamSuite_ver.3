@@ -4,6 +4,11 @@ import { Head, Link, useForm, usePage } from '@inertiajs/react';
 export default function Backup({ lastDryRun, verify, currentCounts }) {
     const { flash, auth } = usePage().props;
     const clubName = auth?.user?.club_name || auth?.club?.name || 'σύλλογος';
+    const clubRole = auth?.user?.role || '';
+    const canDownloadBackup =
+        !!auth?.user?.is_platform_admin ||
+        clubRole === 'admin' ||
+        clubRole === 'secretariat';
     const { data, setData, post, processing, errors } = useForm({
         backup_file: null,
     });
@@ -55,12 +60,19 @@ export default function Backup({ lastDryRun, verify, currentCounts }) {
                     Κατεβάστε JSON με αθλητές, τμήματα, οικονομικά και λογαριασμούς χρηστών του ενεργού
                     συλλόγου.
                 </p>
-                <a
-                    href={route('admin.settings.backup.download')}
-                    className="mt-3 inline-flex rounded-md bg-ts-accent px-4 py-2 text-sm font-medium text-ts-accent-fg hover:bg-ts-accent-hover"
-                >
-                    Λήψη JSON
-                </a>
+                {canDownloadBackup ? (
+                    <a
+                        href={route('admin.settings.backup.download')}
+                        className="mt-3 inline-flex rounded-md bg-ts-accent px-4 py-2 text-sm font-medium text-ts-accent-fg hover:bg-ts-accent-hover"
+                    >
+                        Λήψη JSON
+                    </a>
+                ) : (
+                    <p className="mt-3 text-sm text-ts-muted">
+                        Η λήψη backup είναι διαθέσιμη μόνο σε διαχειριστή πλατφόρμας, διαχειριστή
+                        συλλόγου και γραμματεία.
+                    </p>
+                )}
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
