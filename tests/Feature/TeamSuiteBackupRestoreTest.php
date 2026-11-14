@@ -8,13 +8,19 @@ use App\Models\Athlete;
 use App\Models\AthleteChangeLog;
 use App\Models\AthleteTransaction;
 use App\Models\Attendance;
+use App\Models\CashAccount;
 use App\Models\Club;
+use App\Models\ClubMember;
+use App\Models\ClubSeason;
 use App\Models\ClubSetting;
+use App\Models\Expense;
 use App\Models\ParentAthleteLink;
 use App\Models\ReceiptIssue;
 use App\Models\ReceiptSeries;
+use App\Models\Revenue;
 use App\Models\ScheduleSlot;
 use App\Models\SizeChart;
+use App\Models\StaffMember;
 use App\Models\Training;
 use App\Models\User;
 use App\Services\Backup\TeamSuiteAppDataImporter;
@@ -23,6 +29,7 @@ use App\Services\Backup\TeamSuiteBackupRestoreService;
 use App\Support\PreferredNotifyEmail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -519,5 +526,142 @@ class TeamSuiteBackupRestoreTest extends TestCase
         $dryRun = session('backup_dry_run');
         $this->assertSame(3, $dryRun['counts']['students']);
         $this->assertFalse($dryRun['clubExists']);
+    }
+
+    public function test_restore_keeps_legacy_finance_dates_and_cash_account_links(): void
+    {
+        Carbon::setTestNow('2026-11-14 12:00:00');
+
+        try {
+            $club = Club::query()->create([
+                'id' => 'club-legacy-001',
+                'name' => 'Existing',
+                'slug' => 'existing',
+                'is_active' => true,
+            ]);
+
+            app(TeamSuiteAppDataImporter::class)->import($club->id, [
+                'cashAccounts' => [[
+                    'id' => 'cash-1',
+                    'name' => 'Ταμείο',
+                    'kind' => 'cash',
+                    'openingBalance' => 100,
+                    'active' => true,
+                ]],
+                'clubSeasons' => [[
+                    'id' => 'season-1',
+                    'name' => '2026-2027',
+                    'startDate' => '2026-08-01',
+                    'endDate' => '2027-07-31',
+                ]],
+                'revenues' => [[
+                    'id' => 'rev-1',
+                    'date' => '2026-09-08',
+                    'amount' => 40,
+                    'category' => 'tuition',
+                    'description' => 'Συνδρομή',
+                    'paymentStatus' => 'paid',
+                    'accountId' => 'cash-1',
+                ]],
+                'expenses' => [[
+                    'id' => 'exp-1',
+                    'date' => '2026-10-02',
+                    'amount' => 15,
+                    'category' => 'other',
+                    'description' => 'Έξοδο',
+                    'accountId' => 'cash-1',
+                ]],
+            ]);
+
+            $account = CashAccount::query()->withoutGlobalScopes()
+                ->where('club_id', $club->id)
+                ->where('legacy_id', 'cash-1')
+                ->first();
+            $this->assertNotNull($account);
+            $this->assertTrue($account->is_active);
+            $this->assertSame('cash', $account->kind);
+            $this->assertSame('100.00', (string) $account->opening_balance);
+
+            $revenue = Revenue::query()->withoutGlobalScopes()
+                ->where('club_id', $club->id)
+                ->where('legacy_id', 'rev-1')
+                ->first();
+            $this->assertNotNull($revenue);
+            $this->assertSame('2026-09-08', $revenue->occurred_on?->toDateString());
+            $this->assertSame('2026-09-08', $revenue->meta['date'] ?? null);
+            $this->assertSame($account->id, $revenue->cash_account_id);
+            $this->assertSame(40.0, (float) $revenue->amount);
+
+            $expense = Expense::query()->withoutGlobalScopes()
+                ->where('club_id', $club->id)
+                ->where('legacy_id', 'exp-1')
+                ->first();
+            $this->assertNotNull($expense);
+            $this->assertSame('2026-10-02', $expense->occurred_on?->toDateString());
+            $this->assertSame($account->id, $expense->cash_account_id);
+
+            $season = ClubSeason::query()->withoutGlobalScopes()
+                ->where('club_id', $club->id)
+                ->where('legacy_id', 'season-1')
+                ->first();
+            $this->assertNotNull($season);
+            $this->assertSame('2026-08-01', $season->starts_on?->toDateString());
+            $this->assertSame('2027-07-31', $season->ends_on?->toDateString());
+            $this->assertTrue($season->is_active);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_restore_maps_legacy_staff_role_and_member_active_flag(): void
+    {
+        $club = Club::query()->create([
+            'id' => 'club-legacy-001',
+            'name' => 'Existing',
+            'slug' => 'existing',
+            'is_active' => true,
+        ]);
+
+        app(TeamSuiteAppDataImporter::class)->import($club->id, [
+            'staff' => [[
+                'id' => 'staff-1',
+                'firstName' => 'Μαρία',
+                'lastName' => 'Παπα',
+                'email' => 'staff@example.com',
+                'phone' => '6900000001',
+                'role' => 'secretariat',
+                'active' => false,
+            ]],
+            'clubMembers' => [[
+                'id' => 'member-1',
+                'firstName' => 'Γιάννης',
+                'lastName' => 'Νίκου',
+                'email' => 'member@example.com',
+                'phone' => '6900000002',
+                'active' => false,
+                'address' => 'Οδός 1',
+                'postalCode' => '26221',
+                'city' => 'Πάτρα',
+                'prefecture' => 'Αχαΐας',
+            ]],
+        ]);
+
+        $staff = StaffMember::query()->withoutGlobalScopes()
+            ->where('club_id', $club->id)
+            ->where('legacy_id', 'staff-1')
+            ->first();
+        $this->assertNotNull($staff);
+        $this->assertSame('secretariat', $staff->role_title);
+        $this->assertFalse($staff->is_active);
+
+        $member = ClubMember::query()->withoutGlobalScopes()
+            ->where('club_id', $club->id)
+            ->where('legacy_id', 'member-1')
+            ->first();
+        $this->assertNotNull($member);
+        $this->assertSame('inactive', $member->status);
+        $this->assertSame('Οδός 1', $member->address);
+        $this->assertSame('26221', $member->postal_code);
+        $this->assertSame('Πάτρα', $member->city);
     }
 }

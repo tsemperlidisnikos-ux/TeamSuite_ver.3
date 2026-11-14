@@ -249,12 +249,40 @@ class TeamSuiteAppDataImporter
     /** @param  list<array<string, mixed>>  $rows */
     private function importClubSeasons(string $clubId, array $rows): int
     {
-        return $this->importSimpleList($clubId, $rows, ClubSeason::class, [
-            'name' => 'name',
-            'startsOn' => 'starts_on',
-            'endsOn' => 'ends_on',
-            'isActive' => 'is_active',
-        ]);
+        $count = 0;
+        $today = now()->toDateString();
+
+        foreach ($rows as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+
+            $startsOn = $this->firstParsableDate([
+                $row['startsOn'] ?? null,
+                $row['startDate'] ?? null,
+                $row['starts_on'] ?? null,
+            ]);
+            $endsOn = $this->firstParsableDate([
+                $row['endsOn'] ?? null,
+                $row['endDate'] ?? null,
+                $row['ends_on'] ?? null,
+            ]);
+
+            $isActive = $row['isActive'] ?? $row['is_active'] ?? $row['active'] ?? null;
+            if ($isActive === null && $startsOn instanceof Carbon && $endsOn instanceof Carbon) {
+                $isActive = $startsOn->toDateString() <= $today && $endsOn->toDateString() >= $today;
+            }
+
+            $this->upsert(ClubSeason::class, $clubId, $row, [
+                'name' => (string) ($row['name'] ?? ''),
+                'starts_on' => $startsOn,
+                'ends_on' => $endsOn,
+                'is_active' => (bool) $isActive,
+            ]);
+            $count++;
+        }
+
+        return $count;
     }
 
     /** @param  list<array<string, mixed>>  $rows */
@@ -263,6 +291,7 @@ class TeamSuiteAppDataImporter
         return $this->importSimpleList($clubId, $rows, CashAccount::class, [
             'name' => 'name',
             'openingBalance' => 'opening_balance',
+            'active' => 'is_active',
             'isActive' => 'is_active',
         ]);
     }
@@ -349,12 +378,16 @@ class TeamSuiteAppDataImporter
                 'phone' => 'phone',
                 'sport' => 'sport',
                 'hireDate' => 'hire_date',
+                'active' => 'is_active',
                 'isActive' => 'is_active',
                 'ggaCode' => 'gga_code',
                 'licenseLevel' => 'license_level',
             ]);
             $attrs['user_id'] = $this->resolveUserId($row['userId'] ?? null);
-            $attrs['meta'] = $this->metaRemainder($row, ['id', 'firstName', 'lastName', 'email', 'phone', 'sport', 'hireDate', 'isActive', 'ggaCode', 'licenseLevel', 'userId']);
+            $attrs['meta'] = $this->metaRemainder($row, [
+                'id', 'firstName', 'lastName', 'email', 'phone', 'sport', 'hireDate',
+                'active', 'isActive', 'ggaCode', 'licenseLevel', 'userId',
+            ]);
             $this->upsert(Coach::class, $clubId, $row, $attrs);
             $count++;
         }
@@ -374,12 +407,20 @@ class TeamSuiteAppDataImporter
                 'firstName' => 'first_name',
                 'lastName' => 'last_name',
                 'roleTitle' => 'role_title',
+                'role' => 'role_title',
                 'email' => 'email',
                 'phone' => 'phone',
+                'active' => 'is_active',
                 'isActive' => 'is_active',
             ]);
+            if (empty($attrs['role_title']) && ! empty($row['role'])) {
+                $attrs['role_title'] = (string) $row['role'];
+            }
             $attrs['user_id'] = $this->resolveUserId($row['userId'] ?? null);
-            $attrs['meta'] = $this->metaRemainder($row, array_keys($attrs));
+            $attrs['meta'] = $this->metaRemainder($row, [
+                'id', 'firstName', 'lastName', 'roleTitle', 'role', 'email', 'phone',
+                'active', 'isActive', 'userId', 'hireDate',
+            ]);
             $this->upsert(StaffMember::class, $clubId, $row, $attrs);
             $count++;
         }
@@ -390,14 +431,45 @@ class TeamSuiteAppDataImporter
     /** @param  list<array<string, mixed>>  $rows */
     private function importClubMembers(string $clubId, array $rows): int
     {
-        return $this->importSimpleList($clubId, $rows, ClubMember::class, [
-            'firstName' => 'first_name',
-            'lastName' => 'last_name',
-            'email' => 'email',
-            'phone' => 'phone',
-            'memberNumber' => 'member_number',
-            'status' => 'status',
-        ]);
+        $count = 0;
+        foreach ($rows as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+
+            $attrs = $this->mapFields($row, [
+                'firstName' => 'first_name',
+                'lastName' => 'last_name',
+                'email' => 'email',
+                'phone' => 'phone',
+                'memberNumber' => 'member_number',
+                'status' => 'status',
+            ]);
+
+            if (! array_key_exists('status', $attrs) && array_key_exists('active', $row)) {
+                $attrs['status'] = filter_var($row['active'], FILTER_VALIDATE_BOOLEAN) ? 'active' : 'inactive';
+            }
+
+            $meta = $this->metaRemainder($row, [
+                'id', 'firstName', 'lastName', 'email', 'phone', 'memberNumber', 'status', 'active',
+                'address', 'postalCode', 'postal_code', 'city', 'prefecture', 'createdAt', 'updatedAt',
+            ]);
+            foreach (['address' => 'address', 'city' => 'city', 'prefecture' => 'prefecture'] as $legacy => $column) {
+                if (array_key_exists($legacy, $row) && $row[$legacy] !== null && $row[$legacy] !== '') {
+                    $meta[$column] = $row[$legacy];
+                }
+            }
+            $postal = $row['postalCode'] ?? $row['postal_code'] ?? null;
+            if ($postal !== null && $postal !== '') {
+                $meta['postal_code'] = $postal;
+            }
+            $attrs['meta'] = $meta;
+
+            $this->upsert(ClubMember::class, $clubId, $row, $attrs);
+            $count++;
+        }
+
+        return $count;
     }
 
     /** @param  list<array<string, mixed>>  $rows */
@@ -1176,11 +1248,21 @@ class TeamSuiteAppDataImporter
             $attrs = $this->mapFields($row, [
                 'amount' => 'amount',
                 'category' => 'category',
-                'occurredOn' => 'occurred_on',
                 'description' => 'description',
             ]);
-            $attrs['cash_account_id'] = $this->resolveMap('cashAccounts', $row['cashAccountId'] ?? null);
-            $attrs['meta'] = $this->metaRemainder($row, ['id', 'amount', 'category', 'occurredOn', 'description', 'cashAccountId']);
+            $occurredOn = $this->firstParsableDate([
+                $row['occurredOn'] ?? null,
+                $row['date'] ?? null,
+                $row['occurred_on'] ?? null,
+            ]);
+            if ($occurredOn instanceof Carbon) {
+                $attrs['occurred_on'] = $occurredOn->toDateString();
+            }
+            $attrs['cash_account_id'] = $this->resolveMap(
+                'cashAccounts',
+                $row['cashAccountId'] ?? $row['accountId'] ?? null,
+            );
+            $attrs['meta'] = $this->metaRemainder($row, ['id', 'amount', 'category', 'occurredOn', 'occurred_on', 'description', 'cashAccountId']);
             $this->upsert(Revenue::class, $clubId, $row, $attrs);
             $count++;
         }
@@ -1199,11 +1281,21 @@ class TeamSuiteAppDataImporter
             $attrs = $this->mapFields($row, [
                 'amount' => 'amount',
                 'category' => 'category',
-                'occurredOn' => 'occurred_on',
                 'description' => 'description',
             ]);
-            $attrs['cash_account_id'] = $this->resolveMap('cashAccounts', $row['cashAccountId'] ?? null);
-            $attrs['meta'] = $this->metaRemainder($row, ['id', 'amount', 'category', 'occurredOn', 'description', 'cashAccountId']);
+            $occurredOn = $this->firstParsableDate([
+                $row['occurredOn'] ?? null,
+                $row['date'] ?? null,
+                $row['occurred_on'] ?? null,
+            ]);
+            if ($occurredOn instanceof Carbon) {
+                $attrs['occurred_on'] = $occurredOn->toDateString();
+            }
+            $attrs['cash_account_id'] = $this->resolveMap(
+                'cashAccounts',
+                $row['cashAccountId'] ?? $row['accountId'] ?? null,
+            );
+            $attrs['meta'] = $this->metaRemainder($row, ['id', 'amount', 'category', 'occurredOn', 'occurred_on', 'description', 'cashAccountId']);
             $this->upsert(Expense::class, $clubId, $row, $attrs);
             $count++;
         }
