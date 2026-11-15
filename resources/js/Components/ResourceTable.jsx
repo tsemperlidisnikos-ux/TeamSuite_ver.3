@@ -2,6 +2,7 @@ import CoachEditModal from '@/Components/Admin/CoachEditModal';
 import { FieldInput } from '@/Components/ResourceForm';
 import Modal from '@/Components/Modal';
 import { classGenderLabel } from '@/lib/genderLabels';
+import { normalizePrefecture } from '@/lib/greekPrefectures';
 import { staffRoleLabel, staffRoleValue } from '@/lib/staffRoles';
 import { router } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
@@ -23,6 +24,9 @@ function formatCell(value, columnKey) {
     }
     if (columnKey === 'gender') {
         return classGenderLabel(value);
+    }
+    if (columnKey === 'prefecture' || columnKey === 'county') {
+        return normalizePrefecture(value) || '—';
     }
     if (columnKey === 'photo_url') {
         if (!value) {
@@ -101,6 +105,8 @@ export default function ResourceTable({
                 data[f.name] = !!raw;
             } else if (f.name === 'role_title') {
                 data[f.name] = staffRoleValue(raw);
+            } else if (f.name === 'prefecture' || f.name === 'county') {
+                data[f.name] = normalizePrefecture(raw);
             } else if (f.type === 'date') {
                 data[f.name] = toDateInputValue(raw);
             } else {

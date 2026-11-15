@@ -1,3 +1,4 @@
+import PrefectureSelect from '@/Components/PrefectureSelect';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { migrateGuardianNameIntoParentFields } from '@/lib/greekGivenName';
 import {
@@ -869,13 +870,11 @@ export default function Show({
                                         />
                                     </Field>
                                     <Field label="Νομός">
-                                        <input
+                                        <PrefectureSelect
                                             className={inputClass()}
                                             disabled={!editing}
                                             value={form.data.county || ''}
-                                            onChange={(e) =>
-                                                form.setData('county', e.target.value)
-                                            }
+                                            onChange={(value) => form.setData('county', value)}
                                         />
                                     </Field>
                                 </div>

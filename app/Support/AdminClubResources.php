@@ -255,7 +255,12 @@ final class AdminClubResources
                     ['name' => 'address', 'label' => 'Διεύθυνση', 'type' => 'text'],
                     ['name' => 'postal_code', 'label' => 'ΤΚ', 'type' => 'text'],
                     ['name' => 'city', 'label' => 'Πόλη', 'type' => 'text'],
-                    ['name' => 'prefecture', 'label' => 'Νομός', 'type' => 'text'],
+                    [
+                        'name' => 'prefecture',
+                        'label' => 'Νομός',
+                        'type' => 'select',
+                        'options' => GreekPrefectures::options(),
+                    ],
                     ['name' => 'email', 'label' => 'Email', 'type' => 'email'],
                     ['name' => 'phone', 'label' => 'Τηλέφωνο', 'type' => 'text'],
                     [

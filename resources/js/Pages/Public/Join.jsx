@@ -1,3 +1,4 @@
+import PrefectureSelect from '@/Components/PrefectureSelect';
 import { PublicClubMessage } from '@/Components/PublicClubShell';
 import { Head, useForm, usePage } from '@inertiajs/react';
 import { useState } from 'react';
@@ -305,10 +306,10 @@ export default function Join({ club, registration }) {
                             )}
                             {field(
                                 'Νομός',
-                                <input
+                                <PrefectureSelect
                                     className={inputClass}
                                     value={form.data.county}
-                                    onChange={(e) => form.setData('county', e.target.value)}
+                                    onChange={(value) => form.setData('county', value)}
                                 />,
                             )}
                             {field(

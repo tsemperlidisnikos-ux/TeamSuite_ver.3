@@ -1,3 +1,4 @@
+import { normalizePrefecture } from '@/lib/greekPrefectures';
 import { useForm } from '@inertiajs/react';
 
 const emptyFromFields = (fields) => {
@@ -37,7 +38,11 @@ function FieldInput({ field, value, onChange, error }) {
     }
     if (field.type === 'select') {
         const options = field.options || [];
-        const current = value ?? '';
+        const rawCurrent = value ?? '';
+        const current =
+            field.name === 'prefecture' || field.name === 'county'
+                ? normalizePrefecture(rawCurrent)
+                : rawCurrent;
         const hasCurrent = current !== '' && options.some((o) => o.value === current);
 
         return (
