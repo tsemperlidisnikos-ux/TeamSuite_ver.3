@@ -44,6 +44,7 @@ export default function ClubResourcePage({
     emptyMessage = null,
     missingAttendance = [],
     missingAttendanceCount = 0,
+    sports = [],
 }) {
     const flash = usePage().props.flash;
     const [showCreate, setShowCreate] = useState(() => title === 'Αγώνες');
@@ -621,6 +622,11 @@ export default function ClubResourcePage({
                                         onChange={(e) => applyFilters({ sport: e.target.value })}
                                     >
                                         <option value="">Όλα τα αθλήματα</option>
+                                        {(sports || []).map((name) => (
+                                            <option key={name} value={name}>
+                                                {name}
+                                            </option>
+                                        ))}
                                     </select>
                                 </label>
                             )}
@@ -816,6 +822,8 @@ export default function ClubResourcePage({
                     fields={fields}
                     updateRoute={routes.update}
                     destroyRoute={routes.destroy}
+                    editMode={isCoaches ? 'coach' : 'default'}
+                    sports={sports}
                     editTitle={
                         isCoaches
                             ? 'Επεξεργασία προπονητή'

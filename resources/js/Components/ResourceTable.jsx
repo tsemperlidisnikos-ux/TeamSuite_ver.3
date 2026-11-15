@@ -1,9 +1,10 @@
+import CoachEditModal from '@/Components/Admin/CoachEditModal';
 import { FieldInput } from '@/Components/ResourceForm';
 import Modal from '@/Components/Modal';
 import { classGenderLabel } from '@/lib/genderLabels';
 import { staffRoleLabel, staffRoleValue } from '@/lib/staffRoles';
 import { router } from '@inertiajs/react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 function toDateInputValue(value) {
     if (value === null || value === undefined || value === '') {
@@ -70,12 +71,18 @@ export default function ResourceTable({
     fields = [],
     emptyMessage = 'Δεν υπάρχουν εγγραφές.',
     editTitle = 'Επεξεργασία εγγραφής',
+    editMode = 'default',
+    sports = [],
     selectable = false,
     selectedIds = [],
     onToggleSelect = null,
 }) {
     const [editingId, setEditingId] = useState(null);
     const [editData, setEditData] = useState({});
+    const editingRow = useMemo(
+        () => rows.find((row) => row.id === editingId) || null,
+        [rows, editingId],
+    );
 
     const closeEdit = () => {
         setEditingId(null);
@@ -84,6 +91,9 @@ export default function ResourceTable({
 
     const startEdit = (row) => {
         setEditingId(row.id);
+        if (editMode === 'coach') {
+            return;
+        }
         const data = {};
         fields.forEach((f) => {
             const raw = row[f.name];
@@ -125,55 +135,65 @@ export default function ResourceTable({
 
     return (
         <div className="overflow-x-auto rounded-lg border border-ts-border">
-            <Modal show={Boolean(editingId && updateRoute)} onClose={closeEdit} maxWidth="2xl">
-                <form onSubmit={submitEdit} className="bg-sky-50 p-5">
-                    <div className="mb-4 flex items-start justify-between gap-3">
-                        <p className="text-xs font-semibold uppercase tracking-wider text-sky-800">
-                            {editTitle}
-                        </p>
-                        <button
-                            type="button"
-                            onClick={closeEdit}
-                            className="rounded-md px-2 py-1 text-sm text-slate-500 hover:bg-white/70 hover:text-slate-800"
-                            aria-label="Κλείσιμο"
-                        >
-                            ✕
-                        </button>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                        {fields.map((field) => (
-                            <label key={field.name} className="block text-sm">
-                                <span className="text-slate-600">{field.label}</span>
-                                <FieldInput
-                                    field={field}
-                                    value={editData[field.name]}
-                                    onChange={(v) =>
-                                        setEditData((d) => ({
-                                            ...d,
-                                            [field.name]: v,
-                                        }))
-                                    }
-                                />
-                            </label>
-                        ))}
-                    </div>
-                    <div className="mt-5 flex flex-wrap gap-2">
-                        <button
-                            type="submit"
-                            className="rounded-md bg-ts-accent px-3 py-1.5 text-sm font-medium text-ts-accent-fg hover:bg-ts-accent-hover"
-                        >
-                            Αποθήκευση αλλαγών
-                        </button>
-                        <button
-                            type="button"
-                            onClick={closeEdit}
-                            className="rounded-md px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900"
-                        >
-                            Ακύρωση
-                        </button>
-                    </div>
-                </form>
-            </Modal>
+            {editMode === 'coach' ? (
+                <CoachEditModal
+                    show={Boolean(editingId && updateRoute && editingRow)}
+                    row={editingRow}
+                    updateRoute={updateRoute}
+                    sports={sports}
+                    onClose={closeEdit}
+                />
+            ) : (
+                <Modal show={Boolean(editingId && updateRoute)} onClose={closeEdit} maxWidth="2xl">
+                    <form onSubmit={submitEdit} className="bg-sky-50 p-5">
+                        <div className="mb-4 flex items-start justify-between gap-3">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-sky-800">
+                                {editTitle}
+                            </p>
+                            <button
+                                type="button"
+                                onClick={closeEdit}
+                                className="rounded-md px-2 py-1 text-sm text-slate-500 hover:bg-white/70 hover:text-slate-800"
+                                aria-label="Κλείσιμο"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                            {fields.map((field) => (
+                                <label key={field.name} className="block text-sm">
+                                    <span className="text-slate-600">{field.label}</span>
+                                    <FieldInput
+                                        field={field}
+                                        value={editData[field.name]}
+                                        onChange={(v) =>
+                                            setEditData((d) => ({
+                                                ...d,
+                                                [field.name]: v,
+                                            }))
+                                        }
+                                    />
+                                </label>
+                            ))}
+                        </div>
+                        <div className="mt-5 flex flex-wrap gap-2">
+                            <button
+                                type="submit"
+                                className="rounded-md bg-ts-accent px-3 py-1.5 text-sm font-medium text-ts-accent-fg hover:bg-ts-accent-hover"
+                            >
+                                Αποθήκευση αλλαγών
+                            </button>
+                            <button
+                                type="button"
+                                onClick={closeEdit}
+                                className="rounded-md px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900"
+                            >
+                                Ακύρωση
+                            </button>
+                        </div>
+                    </form>
+                </Modal>
+            )}
             <table className="min-w-full divide-y divide-ts-border text-sm">
                 <thead className="bg-ts-surface-2 text-left text-xs uppercase tracking-wider text-ts-muted">
                     <tr>

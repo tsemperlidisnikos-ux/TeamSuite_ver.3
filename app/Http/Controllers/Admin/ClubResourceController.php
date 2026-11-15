@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Admin\Concerns\HandlesClubResources;
 use App\Http\Controllers\Controller;
+use App\Models\Sport;
 use App\Support\AdminClubResources;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -76,6 +78,9 @@ abstract class ClubResourceController extends Controller
             'filterLabel' => $config['filter_label'] ?? 'Κατάσταση',
             'toolbar' => $config['toolbar'] ?? [],
             'emptyMessage' => $config['empty_message'] ?? null,
+            'sports' => $this->resourceKey() === 'coaches'
+                ? $this->clubQuery(Sport::class, $request)->orderBy('name')->pluck('name')->values()->all()
+                : [],
         ]);
     }
 
@@ -153,10 +158,44 @@ abstract class ClubResourceController extends Controller
 
         if (in_array($key, ['coaches', 'staff', 'members'], true)) {
             $meta = is_array($row['meta'] ?? null) ? $row['meta'] : [];
-            $row['photo_url'] = $row['photo_url'] ?? ($meta['photo_url'] ?? null);
+            $row['photo_url'] = $this->publicStorageUrl(
+                $row['photo_url'] ?? ($meta['photo_url'] ?? $meta['photoUrl'] ?? null),
+            );
+        }
+
+        if ($key === 'coaches') {
+            $meta = is_array($row['meta'] ?? null) ? $row['meta'] : [];
+            $row['license_starts_at'] = $meta['license_starts_at'] ?? $meta['licenseStartsAt'] ?? null;
+            $row['license_expires_at'] = $meta['license_expires_at'] ?? $meta['licenseExpiresAt'] ?? null;
+            $row['license_file_url'] = $this->publicStorageUrl(
+                $meta['license_file'] ?? $meta['licenseFile'] ?? null,
+            );
+            $row['first_aid_starts_at'] = $meta['first_aid_starts_at'] ?? $meta['firstAidStartsAt'] ?? null;
+            $row['first_aid_expires_at'] = $meta['first_aid_expires_at']
+                ?? $meta['first_aid']
+                ?? $meta['firstAidExpiresAt']
+                ?? null;
+            $row['first_aid_file_url'] = $this->publicStorageUrl(
+                $meta['first_aid_file'] ?? $meta['firstAidFile'] ?? null,
+            );
+            $row['first_aid'] = $row['first_aid_expires_at'];
         }
 
         return $row;
+    }
+
+    private function publicStorageUrl(mixed $path): ?string
+    {
+        if (! is_string($path) || trim($path) === '') {
+            return null;
+        }
+
+        $value = trim($path);
+        if (str_starts_with($value, 'http://') || str_starts_with($value, 'https://') || str_starts_with($value, '/')) {
+            return $value;
+        }
+
+        return Storage::disk('public')->url($value);
     }
 
     public function store(Request $request): RedirectResponse
