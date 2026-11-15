@@ -685,9 +685,24 @@ export default function Index({
                             type="button"
                             className={btnSecondary}
                             onClick={() => navigator.clipboard?.writeText(publicUrl)}
+                            disabled={!currentClub?.slug}
                         >
                             Αντιγραφή
                         </button>
+                        {currentClub?.slug ? (
+                            <a
+                                href={publicUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className={btnSecondary}
+                            >
+                                Προεπισκόπηση
+                            </a>
+                        ) : (
+                            <button type="button" className={btnSecondary} disabled>
+                                Προεπισκόπηση
+                            </button>
+                        )}
                     </div>
                     {showRentEmbed ? (
                         <div className="space-y-2 rounded-lg border border-ts-border bg-ts-bg p-3">
