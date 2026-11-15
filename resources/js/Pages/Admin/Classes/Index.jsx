@@ -1,4 +1,5 @@
 import AdminLayout from '@/Layouts/AdminLayout';
+import { classGenderLabel } from '@/lib/genderLabels';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
 
@@ -285,7 +286,9 @@ export default function Index({
                                             {c.name}
                                         </Link>
                                     </td>
-                                    <td className="px-3 py-2 text-ts-muted">{c.gender || '—'}</td>
+                                    <td className="px-3 py-2 text-ts-muted">
+                                        {classGenderLabel(c.gender)}
+                                    </td>
                                     <td className="px-3 py-2 text-ts-muted">
                                         {c.season_name || '—'}
                                     </td>

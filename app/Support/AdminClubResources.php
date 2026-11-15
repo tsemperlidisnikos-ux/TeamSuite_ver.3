@@ -144,7 +144,6 @@ final class AdminClubResources
                     ['key' => 'sport', 'label' => 'Άθλημα'],
                     ['key' => 'gga_code', 'label' => 'Κωδικός Γ.Γ.Α'],
                     ['key' => 'license_level', 'label' => 'Άδεια'],
-                    ['key' => 'first_aid', 'label' => 'Πρώτες βοήθειες'],
                     ['key' => 'email', 'label' => 'Email'],
                     ['key' => 'phone', 'label' => 'Τηλέφωνο'],
                     ['key' => 'is_active', 'label' => 'Κατάσταση'],

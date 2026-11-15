@@ -816,6 +816,13 @@ export default function ClubResourcePage({
                     fields={fields}
                     updateRoute={routes.update}
                     destroyRoute={routes.destroy}
+                    editTitle={
+                        isCoaches
+                            ? 'Επεξεργασία προπονητή'
+                            : isStaff
+                              ? 'Επεξεργασία προσωπικού'
+                              : 'Επεξεργασία εγγραφής'
+                    }
                     emptyMessage={
                         emptyMessage ||
                         (isCoaches

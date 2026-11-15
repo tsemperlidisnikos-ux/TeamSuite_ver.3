@@ -1,4 +1,5 @@
 import AdminLayout from '@/Layouts/AdminLayout';
+import { classGenderLabel } from '@/lib/genderLabels';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 
@@ -12,14 +13,6 @@ const TABS = [
 ];
 
 const WEEKDAYS = ['Κυρ', 'Δευ', 'Τρί', 'Τετ', 'Πέμ', 'Παρ', 'Σάβ'];
-
-const GENDER_LABELS = {
-    male: 'Αγόρια',
-    female: 'Κορίτσια',
-    mixed: 'Μικτό',
-    boys: 'Αγόρια',
-    girls: 'Κορίτσια',
-};
 
 const STATUS_LABEL = {
     active: 'Ενεργός',
@@ -321,9 +314,7 @@ export default function Show({
                                 <div className="flex justify-between gap-2">
                                     <dt className="text-ts-muted">Φύλο</dt>
                                     <dd className="text-ts-fg">
-                                        {GENDER_LABELS[classItem.gender] ||
-                                            classItem.gender ||
-                                            '—'}
+                                        {classGenderLabel(classItem.gender)}
                                     </dd>
                                 </div>
                                 <div className="flex justify-between gap-2">

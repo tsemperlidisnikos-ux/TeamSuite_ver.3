@@ -1,4 +1,5 @@
 import { FieldInput } from '@/Components/ResourceForm';
+import { classGenderLabel } from '@/lib/genderLabels';
 import { staffRoleLabel, staffRoleValue } from '@/lib/staffRoles';
 import { router } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
@@ -6,6 +7,9 @@ import { useEffect, useRef, useState } from 'react';
 function formatCell(value, columnKey) {
     if (columnKey === 'role_title') {
         return staffRoleLabel(value);
+    }
+    if (columnKey === 'gender') {
+        return classGenderLabel(value);
     }
     if (columnKey === 'photo_url') {
         if (!value) {
@@ -53,6 +57,7 @@ export default function ResourceTable({
     updateRoute,
     fields = [],
     emptyMessage = 'Δεν υπάρχουν εγγραφές.',
+    editTitle = 'Επεξεργασία εγγραφής',
     selectable = false,
     selectedIds = [],
     onToggleSelect = null,
@@ -119,7 +124,7 @@ export default function ResourceTable({
                     className="sticky top-0 z-20 border-b border-sky-200 bg-sky-50 p-4 shadow-sm"
                 >
                     <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-sky-800">
-                        Επεξεργασία εγγραφής
+                        {editTitle}
                     </p>
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                         {fields.map((field) => (
