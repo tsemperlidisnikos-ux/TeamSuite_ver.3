@@ -33,6 +33,8 @@ trait HandlesClubResources
         array $searchFields = [],
         ?string $statusField = null,
         ?array $orderBy = null,
+        string $role = '',
+        ?string $roleField = null,
     ): LengthAwarePaginator {
         $keys = array_values(array_unique(array_merge($columnKeys, $fieldKeys)));
         $builder = $this->clubQuery($modelClass, $request);
@@ -55,6 +57,10 @@ trait HandlesClubResources
             } else {
                 $builder->where($statusField, $status);
             }
+        }
+
+        if ($role !== '' && is_string($roleField) && $roleField !== '') {
+            $builder->where($roleField, $role);
         }
 
         if (is_array($orderBy) && $orderBy !== []) {

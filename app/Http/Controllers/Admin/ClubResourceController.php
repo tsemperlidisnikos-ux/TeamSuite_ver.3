@@ -32,6 +32,7 @@ abstract class ClubResourceController extends Controller
         )));
         $q = trim((string) $request->query('q', ''));
         $status = (string) $request->query('status', '');
+        $role = trim((string) $request->query('role', ''));
 
         $paginator = $this->clubResourceIndex(
             $request,
@@ -44,6 +45,8 @@ abstract class ClubResourceController extends Controller
             $config['search'] ?? [],
             $config['status_field'] ?? null,
             $config['order_by'] ?? null,
+            $this->resourceKey() === 'staff' ? $role : '',
+            $this->resourceKey() === 'staff' ? 'role_title' : null,
         );
 
         $paginator->setCollection(
@@ -67,6 +70,7 @@ abstract class ClubResourceController extends Controller
             'filters' => [
                 'q' => $q,
                 'status' => $status,
+                'role' => $role,
             ],
             'filterOptions' => $config['filter_options'] ?? null,
             'filterLabel' => $config['filter_label'] ?? 'Κατάσταση',

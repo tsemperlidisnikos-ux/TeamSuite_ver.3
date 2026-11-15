@@ -1,8 +1,12 @@
 import { FieldInput } from '@/Components/ResourceForm';
+import { staffRoleLabel, staffRoleValue } from '@/lib/staffRoles';
 import { router } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
 
 function formatCell(value, columnKey) {
+    if (columnKey === 'role_title') {
+        return staffRoleLabel(value);
+    }
     if (columnKey === 'photo_url') {
         if (!value) {
             return (
@@ -62,7 +66,13 @@ export default function ResourceTable({
         const data = {};
         fields.forEach((f) => {
             const raw = row[f.name];
-            data[f.name] = f.type === 'checkbox' ? !!raw : (raw ?? '');
+            if (f.type === 'checkbox') {
+                data[f.name] = !!raw;
+            } else if (f.name === 'role_title') {
+                data[f.name] = staffRoleValue(raw);
+            } else {
+                data[f.name] = raw ?? '';
+            }
         });
         setEditData(data);
     };

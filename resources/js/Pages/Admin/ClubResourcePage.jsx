@@ -1,6 +1,7 @@
 import ResourceForm from '@/Components/ResourceForm';
 import ResourceTable from '@/Components/ResourceTable';
 import AdminLayout from '@/Layouts/AdminLayout';
+import { STAFF_ROLE_OPTIONS, staffRoleLabel } from '@/lib/staffRoles';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 
@@ -36,7 +37,7 @@ export default function ClubResourcePage({
     fields,
     items,
     routes,
-    filters = { q: '', status: '' },
+    filters = { q: '', status: '', role: '' },
     filterOptions = null,
     filterLabel = 'Κατάσταση',
     toolbar = [],
@@ -144,7 +145,15 @@ export default function ClubResourcePage({
         const keys = (columns || []).map((c) => c.key);
         const header = (columns || []).map((c) => c.label).join(',');
         const lines = rows.map((r) =>
-            keys.map((k) => `"${String(r[k] ?? '').replaceAll('"', '""')}"`).join(','),
+            keys
+                .map((k) => {
+                    const raw = r[k] ?? '';
+                    const value =
+                        isStaff && k === 'role_title' ? staffRoleLabel(raw) : raw;
+
+                    return `"${String(value).replaceAll('"', '""')}"`;
+                })
+                .join(','),
         );
         const blob = new Blob([[header, ...lines].join('\n')], {
             type: 'text/csv;charset=utf-8',
@@ -589,12 +598,15 @@ export default function ClubResourcePage({
                                     </span>
                                     <select
                                         className="min-w-[9rem] rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
-                                        defaultValue=""
+                                        value={filters.role || ''}
+                                        onChange={(e) => applyFilters({ role: e.target.value })}
                                     >
                                         <option value="">Όλοι οι ρόλοι</option>
-                                        <option value="admin">Διαχειριστής</option>
-                                        <option value="coach">Προπονητής</option>
-                                        <option value="secretariat">Γραμματεία</option>
+                                        {STAFF_ROLE_OPTIONS.map((option) => (
+                                            <option key={option.value} value={option.value}>
+                                                {option.label}
+                                            </option>
+                                        ))}
                                     </select>
                                 </label>
                             )}
