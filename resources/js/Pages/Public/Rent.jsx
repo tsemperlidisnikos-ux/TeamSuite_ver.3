@@ -171,6 +171,60 @@ export default function Rent({
 
     const hero = club?.heroImageUrl || club?.logo_url;
 
+    useEffect(() => {
+        if (typeof window === 'undefined' || window.parent === window) {
+            return undefined;
+        }
+
+        const send = () => {
+            const root = document.querySelector('[data-rent-embed-root]');
+            const height = Math.ceil(
+                Math.max(
+                    root instanceof HTMLElement ? root.scrollHeight : 0,
+                    document.documentElement.scrollHeight,
+                    document.body?.scrollHeight ?? 0,
+                ),
+            );
+            window.parent.postMessage({ type: 'teamsuite-rent-height', height }, '*');
+        };
+
+        send();
+        const root = document.querySelector('[data-rent-embed-root]');
+        const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(send) : null;
+        if (root && observer) {
+            observer.observe(root);
+        }
+        let ticks = 0;
+        const timer = window.setInterval(() => {
+            send();
+            ticks += 1;
+            if (ticks >= 12) {
+                window.clearInterval(timer);
+            }
+        }, 500);
+        window.addEventListener('resize', send);
+
+        return () => {
+            observer?.disconnect();
+            window.clearInterval(timer);
+            window.removeEventListener('resize', send);
+        };
+    }, [
+        club,
+        loading,
+        date,
+        facilityId,
+        slot,
+        publicEnabled,
+        facilities.length,
+        form.data.use_locker_room,
+        form.data.customer_last_name,
+        form.data.customer_first_name,
+        clientError,
+        form.errors,
+        form.processing,
+    ]);
+
     if (loading || !club) {
         return <PublicClubLoading message="Φόρτωση..." />;
     }
@@ -247,7 +301,7 @@ export default function Rent({
     }
 
     return (
-        <div className="min-h-screen bg-slate-100 px-4 py-8 text-slate-900">
+        <div className="min-h-screen bg-slate-100 px-4 py-8 text-slate-900" data-rent-embed-root>
             <Head title={`Ενοικίαση — ${club.name}`} />
             <div className="mx-auto w-full max-w-3xl space-y-4">
                 <header className="overflow-hidden rounded-2xl bg-slate-500 text-white shadow-md">

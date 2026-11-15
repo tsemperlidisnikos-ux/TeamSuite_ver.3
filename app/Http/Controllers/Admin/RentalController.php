@@ -211,6 +211,8 @@ class RentalController extends ClubResourceController
             'upcomingBookings' => $upcomingBookings,
             'pastBookings' => $pastBookings,
             'canDeleteBookings' => (bool) $request->user()?->is_platform_admin,
+            'showRentEmbed' => (bool) $request->user()?->is_platform_admin,
+            'publicAppUrl' => rtrim((string) config('app.url'), '/'),
             'occupancy' => $occupancy,
         ]);
     }

@@ -92,6 +92,8 @@ class RentalBookingsTest extends TestCase
                 ->has('pastBookings')
                 ->has('uncollected')
                 ->where('uncollectedCount', 0)
+                ->has('publicAppUrl')
+                ->where('showRentEmbed', false)
             );
     }
 

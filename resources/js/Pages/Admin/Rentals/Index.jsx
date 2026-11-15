@@ -98,6 +98,84 @@ function uploadRentalMedia(payload, { onSuccess, onError } = {}) {
     });
 }
 
+function escapeHtmlAttr(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;');
+}
+
+function rentEmbedOrigins(publicAppUrl) {
+    const primary = String(publicAppUrl || 'https://teamsuite.me').replace(/\/$/, '') || 'https://teamsuite.me';
+    const allowed = [primary];
+    if (primary === 'https://teamsuite.me') {
+        allowed.push('https://www.teamsuite.me');
+    } else if (primary === 'https://www.teamsuite.me') {
+        allowed.push('https://teamsuite.me');
+    }
+    return { primary, allowed };
+}
+
+function rentEmbedScript(publicAppUrl) {
+    const { allowed } = rentEmbedOrigins(publicAppUrl);
+    return `<script>
+window.addEventListener("message", function (event) {
+  var allowed = ${JSON.stringify(allowed)};
+  if (allowed.indexOf(event.origin) === -1) return;
+  if (!event.data || event.data.type !== "teamsuite-rent-height") return;
+  var height = Number(event.data.height);
+  if (!(height > 180)) return;
+  var frames = document.getElementsByTagName("iframe");
+  for (var i = 0; i < frames.length; i++) {
+    if (frames[i].contentWindow === event.source) {
+      frames[i].style.height = height + "px";
+      break;
+    }
+  }
+});
+</script>`;
+}
+
+function rentEmbedHtml(publicAppUrl, slug, clubName) {
+    const { primary } = rentEmbedOrigins(publicAppUrl);
+    const pathSlug = String(slug || '').trim() || 'ΕΔΩ-ΤΟ-SLUG';
+    const src = `${primary}/rent/${pathSlug}`;
+    const title = escapeHtmlAttr(`Ενοικίαση γηπέδου – ${String(clubName || '').trim() || 'σύλλογος'}`);
+    return `<iframe
+  src="${src}"
+  title="${title}"
+  style="width:100%;min-height:920px;border:0;border-radius:12px;"
+  loading="lazy"
+  allow="payment"
+></iframe>
+${rentEmbedScript(publicAppUrl)}`;
+}
+
+function RentEmbedSnippet({ publicAppUrl, slug, clubName }) {
+    const { primary } = rentEmbedOrigins(publicAppUrl);
+    const pathSlug = String(slug || '').trim() || 'ΕΔΩ-ΤΟ-SLUG';
+    const src = `${primary}/rent/${pathSlug}`;
+    const title = `Ενοικίαση γηπέδου – ${String(clubName || '').trim() || 'σύλλογος'}`;
+    const script = rentEmbedScript(publicAppUrl);
+
+    return (
+        <>
+            <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-slate-900 p-3 font-mono text-xs leading-relaxed text-emerald-100">
+                {`<iframe
+  src="${src}"
+  title="${title}"
+  style="width:100%;min-height:920px;border:0;border-radius:12px;"
+  loading="lazy"
+  allow="payment"
+></iframe>`}
+            </pre>
+            <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-slate-900 p-3 font-mono text-xs leading-relaxed text-sky-100">
+                {script}
+            </pre>
+        </>
+    );
+}
+
 function BookingsTable({
     rows = [],
     emptyLabel = 'Δεν υπάρχουν κρατήσεις.',
@@ -223,6 +301,8 @@ export default function Index({
     upcomingBookings = [],
     pastBookings = [],
     canDeleteBookings = false,
+    showRentEmbed = false,
+    publicAppUrl = 'https://teamsuite.me',
     occupancy = {},
 }) {
     const { currentClub, flash, errors } = usePage().props;
@@ -609,6 +689,43 @@ export default function Index({
                             Αντιγραφή
                         </button>
                     </div>
+                    {showRentEmbed ? (
+                        <div className="space-y-2 rounded-lg border border-ts-border bg-ts-bg p-3">
+                            <h3 className="text-sm font-semibold text-ts-fg">
+                                2. Κώδικας για την ιστοσελίδα
+                            </h3>
+                            <p className="text-xs text-ts-muted">
+                                Αντιγράψτε τον κώδικα στην ιστοσελίδα του συλλόγου. Το iframe ανοίγει τη
+                                δημόσια κράτηση από{' '}
+                                <code className="text-ts-fg">
+                                    {rentEmbedOrigins(publicAppUrl).primary}
+                                </code>
+                                .
+                            </p>
+                            <div className="relative">
+                                <RentEmbedSnippet
+                                    publicAppUrl={publicAppUrl}
+                                    slug={currentClub?.slug}
+                                    clubName={currentClub?.name}
+                                />
+                                <button
+                                    type="button"
+                                    className={`${btnSecondary} absolute right-2 top-2 bg-ts-surface`}
+                                    onClick={() =>
+                                        navigator.clipboard?.writeText(
+                                            rentEmbedHtml(
+                                                publicAppUrl,
+                                                currentClub?.slug,
+                                                currentClub?.name,
+                                            ),
+                                        )
+                                    }
+                                >
+                                    Αντιγραφή
+                                </button>
+                            </div>
+                        </div>
+                    ) : null}
                     <div className="flex flex-wrap items-start gap-4">
                         <div className="flex h-28 w-44 items-center justify-center overflow-hidden rounded border border-ts-border bg-ts-bg text-xs text-ts-muted">
                             {heroUrl ? (
