@@ -29,7 +29,7 @@ function FieldInput({ field, value, onChange, error }) {
         return (
             <input
                 type="checkbox"
-                className="mt-2 rounded border-slate-600"
+                className="size-4 shrink-0 rounded border-slate-400"
                 checked={!!value}
                 onChange={(e) => onChange(e.target.checked)}
             />
@@ -101,7 +101,14 @@ export default function ResourceForm({
             )}
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {fields.map((field) => (
-                    <label key={field.name} className="block text-sm">
+                    <label
+                        key={field.name}
+                        className={
+                            field.type === 'checkbox'
+                                ? 'flex items-center gap-2 text-sm'
+                                : 'block text-sm'
+                        }
+                    >
                         <span className="text-ts-muted">
                             {field.label}
                             {field.required ? ' *' : ''}

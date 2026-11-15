@@ -161,7 +161,14 @@ export default function ResourceTable({
                         </div>
                         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                             {fields.map((field) => (
-                                <label key={field.name} className="block text-sm">
+                                <label
+                                    key={field.name}
+                                    className={
+                                        field.type === 'checkbox'
+                                            ? 'flex items-center gap-2 text-sm'
+                                            : 'block text-sm'
+                                    }
+                                >
                                     <span className="text-slate-600">{field.label}</span>
                                     <FieldInput
                                         field={field}

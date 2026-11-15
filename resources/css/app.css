@@ -204,6 +204,19 @@
     animation: backup-restore-slide 1.35s ease-in-out infinite;
 }
 
+/* Keep checkbox boxes from sitting flush against adjacent label text. */
+label > span + input[type='checkbox'],
+label > input[type='checkbox'] + span {
+    margin-inline-start: 0.5rem;
+}
+
+label.flex > span + input[type='checkbox'],
+label.flex > input[type='checkbox'] + span,
+label.inline-flex > span + input[type='checkbox'],
+label.inline-flex > input[type='checkbox'] + span {
+    margin-inline-start: 0;
+}
+
 @media print {
     .no-print {
         display: none !important;
