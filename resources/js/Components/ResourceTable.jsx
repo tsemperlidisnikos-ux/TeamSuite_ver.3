@@ -1,8 +1,20 @@
 import { FieldInput } from '@/Components/ResourceForm';
+import Modal from '@/Components/Modal';
 import { classGenderLabel } from '@/lib/genderLabels';
 import { staffRoleLabel, staffRoleValue } from '@/lib/staffRoles';
 import { router } from '@inertiajs/react';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
+
+function toDateInputValue(value) {
+    if (value === null || value === undefined || value === '') {
+        return '';
+    }
+    const raw = String(value).trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
+        return raw.slice(0, 10);
+    }
+    return raw;
+}
 
 function formatCell(value, columnKey) {
     if (columnKey === 'role_title') {
@@ -64,7 +76,11 @@ export default function ResourceTable({
 }) {
     const [editingId, setEditingId] = useState(null);
     const [editData, setEditData] = useState({});
-    const editFormRef = useRef(null);
+
+    const closeEdit = () => {
+        setEditingId(null);
+        setEditData({});
+    };
 
     const startEdit = (row) => {
         setEditingId(row.id);
@@ -75,6 +91,8 @@ export default function ResourceTable({
                 data[f.name] = !!raw;
             } else if (f.name === 'role_title') {
                 data[f.name] = staffRoleValue(raw);
+            } else if (f.type === 'date') {
+                data[f.name] = toDateInputValue(raw);
             } else {
                 data[f.name] = raw ?? '';
             }
@@ -82,22 +100,12 @@ export default function ResourceTable({
         setEditData(data);
     };
 
-    useEffect(() => {
-        if (!editingId || !editFormRef.current) {
-            return;
-        }
-        editFormRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }, [editingId]);
-
     const submitEdit = (e) => {
         e.preventDefault();
         if (!editingId || !updateRoute) return;
         router.patch(route(updateRoute, editingId), editData, {
             preserveScroll: true,
-            onSuccess: () => {
-                setEditingId(null);
-                setEditData({});
-            },
+            onSuccess: () => closeEdit(),
         });
     };
 
@@ -117,15 +125,21 @@ export default function ResourceTable({
 
     return (
         <div className="overflow-x-auto rounded-lg border border-ts-border">
-            {editingId && updateRoute && (
-                <form
-                    ref={editFormRef}
-                    onSubmit={submitEdit}
-                    className="sticky top-0 z-20 border-b border-sky-200 bg-sky-50 p-4 shadow-sm"
-                >
-                    <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-sky-800">
-                        {editTitle}
-                    </p>
+            <Modal show={Boolean(editingId && updateRoute)} onClose={closeEdit} maxWidth="2xl">
+                <form onSubmit={submitEdit} className="bg-sky-50 p-5">
+                    <div className="mb-4 flex items-start justify-between gap-3">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-sky-800">
+                            {editTitle}
+                        </p>
+                        <button
+                            type="button"
+                            onClick={closeEdit}
+                            className="rounded-md px-2 py-1 text-sm text-slate-500 hover:bg-white/70 hover:text-slate-800"
+                            aria-label="Κλείσιμο"
+                        >
+                            ✕
+                        </button>
+                    </div>
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                         {fields.map((field) => (
                             <label key={field.name} className="block text-sm">
@@ -143,7 +157,7 @@ export default function ResourceTable({
                             </label>
                         ))}
                     </div>
-                    <div className="mt-3 flex gap-2">
+                    <div className="mt-5 flex flex-wrap gap-2">
                         <button
                             type="submit"
                             className="rounded-md bg-ts-accent px-3 py-1.5 text-sm font-medium text-ts-accent-fg hover:bg-ts-accent-hover"
@@ -152,17 +166,14 @@ export default function ResourceTable({
                         </button>
                         <button
                             type="button"
-                            onClick={() => {
-                                setEditingId(null);
-                                setEditData({});
-                            }}
+                            onClick={closeEdit}
                             className="rounded-md px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900"
                         >
                             Ακύρωση
                         </button>
                     </div>
                 </form>
-            )}
+            </Modal>
             <table className="min-w-full divide-y divide-ts-border text-sm">
                 <thead className="bg-ts-surface-2 text-left text-xs uppercase tracking-wider text-ts-muted">
                     <tr>
