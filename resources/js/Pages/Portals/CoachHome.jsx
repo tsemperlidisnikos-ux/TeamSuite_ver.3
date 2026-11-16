@@ -54,10 +54,29 @@ export default function CoachHome({
     const [presentOverrides, setPresentOverrides] = useState({});
     const [saving, setSaving] = useState(false);
     const [notice, setNotice] = useState('');
+    const [annTitle, setAnnTitle] = useState('');
+    const [annBody, setAnnBody] = useState('');
+    const [annClassIds, setAnnClassIds] = useState([]);
+    const [annNotifyParents, setAnnNotifyParents] = useState(true);
+    const [annNotifyAthletes, setAnnNotifyAthletes] = useState(false);
+    const [annSendEmail, setAnnSendEmail] = useState(true);
+    const [annSendSms, setAnnSendSms] = useState(false);
+    const [annSendPush, setAnnSendPush] = useState(false);
+    const [annSending, setAnnSending] = useState(false);
 
     useEffect(() => {
         applyPortalChrome('coach');
     }, []);
+
+    useEffect(() => {
+        if (classes.length === 0) {
+            setAnnClassIds([]);
+            return;
+        }
+        setAnnClassIds((prev) =>
+            prev.length > 0 ? prev.filter((id) => classes.some((c) => c.id === id)) : classes.map((c) => c.id),
+        );
+    }, [classes]);
 
     useEffect(() => {
         if (attendance_date && attendance_date !== date) {
@@ -100,6 +119,41 @@ export default function CoachHome({
             route('portal.coach'),
             { date: nextDate },
             { preserveState: true, preserveScroll: true, replace: true },
+        );
+    }
+
+    function toggleAnnClass(id) {
+        setAnnClassIds((prev) =>
+            prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+        );
+    }
+
+    function sendAnnouncement(e) {
+        e.preventDefault();
+        if (!annTitle.trim() || !annBody.trim()) {
+            return;
+        }
+        setAnnSending(true);
+        router.post(
+            route('portal.coach.announcements.store'),
+            {
+                title: annTitle.trim(),
+                body: annBody.trim(),
+                class_ids: annClassIds,
+                notify_parents: annNotifyParents,
+                notify_athletes: annNotifyAthletes,
+                send_email: annSendEmail,
+                send_sms: annSendSms,
+                send_push: annSendPush,
+            },
+            {
+                preserveScroll: true,
+                onFinish: () => setAnnSending(false),
+                onSuccess: () => {
+                    setAnnTitle('');
+                    setAnnBody('');
+                },
+            },
         );
     }
 
@@ -374,34 +428,151 @@ export default function CoachHome({
                 {tab === 'attendance' ? attendanceSection : null}
 
                 {tab === 'announcements' ? (
-                    <PortalPanel title="Τελευταίες Ανακοινώσεις" icon="📢">
-                        {announcements.length === 0 ? (
-                            <p className="text-sm text-ts-muted">Δεν υπάρχουν ανακοινώσεις.</p>
-                        ) : (
-                            <ul className="divide-y divide-ts-border">
-                                {announcements.map((a) => (
-                                    <li key={a.id} className="py-2">
-                                        <strong className="text-sm">{a.title}</strong>
-                                        {a.image_url ? (
-                                            <img
-                                                src={a.image_url}
-                                                alt=""
-                                                className="mt-2 max-h-36 w-full rounded-md object-cover"
-                                            />
-                                        ) : null}
-                                        {a.body ? (
-                                            <p className="mt-1 whitespace-pre-wrap text-sm text-ts-fg-soft">
-                                                {a.body}
-                                            </p>
-                                        ) : null}
-                                        <div className="text-xs text-ts-muted">
-                                            {a.published_at ? formatDate(a.published_at) : ''}
+                    <div className="space-y-4">
+                        {flash?.success ? (
+                            <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                                {flash.success}
+                            </p>
+                        ) : null}
+                        {flash?.error ? (
+                            <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                                {flash.error}
+                            </p>
+                        ) : null}
+                        <PortalPanel title="Νέα ανακοίνωση" icon="✈">
+                            {!coach ? (
+                                <p className="text-sm text-amber-800">
+                                    Ο λογαριασμός δεν είναι συνδεδεμένος με καρτέλα προπονητή.
+                                </p>
+                            ) : classes.length === 0 ? (
+                                <p className="text-sm text-ts-muted">
+                                    Δεν έχετε τμήματα για αποστολή ανακοίνωσης.
+                                </p>
+                            ) : (
+                                <form onSubmit={sendAnnouncement} className="space-y-3">
+                                    <label className="block text-sm">
+                                        <span className="mb-1 block text-xs text-ts-muted">Τίτλος *</span>
+                                        <input
+                                            required
+                                            className="w-full rounded-md border border-ts-border bg-ts-surface px-2 py-1.5 text-sm"
+                                            value={annTitle}
+                                            onChange={(e) => setAnnTitle(e.target.value)}
+                                            placeholder="Π.χ. Ακύρωση προπόνησης"
+                                        />
+                                    </label>
+                                    <label className="block text-sm">
+                                        <span className="mb-1 block text-xs text-ts-muted">Κείμενο *</span>
+                                        <textarea
+                                            required
+                                            rows={4}
+                                            className="w-full rounded-md border border-ts-border bg-ts-surface px-2 py-1.5 text-sm"
+                                            value={annBody}
+                                            onChange={(e) => setAnnBody(e.target.value)}
+                                            placeholder="Γράψτε την ανακοίνωση…"
+                                        />
+                                    </label>
+                                    <div>
+                                        <p className="mb-1 text-xs text-ts-muted">Τμήματα</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {classes.map((c) => (
+                                                <label
+                                                    key={c.id}
+                                                    className="flex items-center gap-2 rounded-md border border-ts-border bg-ts-surface px-2 py-1 text-sm"
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={annClassIds.includes(c.id)}
+                                                        onChange={() => toggleAnnClass(c.id)}
+                                                    />
+                                                    <span>{c.name}</span>
+                                                </label>
+                                            ))}
                                         </div>
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                    </PortalPanel>
+                                    </div>
+                                    <div className="flex flex-wrap gap-3 text-sm">
+                                        <label className="flex items-center gap-2">
+                                            <input
+                                                type="checkbox"
+                                                checked={annNotifyParents}
+                                                onChange={(e) => setAnnNotifyParents(e.target.checked)}
+                                            />
+                                            <span>Γονείς</span>
+                                        </label>
+                                        <label className="flex items-center gap-2">
+                                            <input
+                                                type="checkbox"
+                                                checked={annNotifyAthletes}
+                                                onChange={(e) => setAnnNotifyAthletes(e.target.checked)}
+                                            />
+                                            <span>Αθλητές</span>
+                                        </label>
+                                    </div>
+                                    <div className="flex flex-wrap gap-3 text-sm">
+                                        <label className="flex items-center gap-2">
+                                            <input
+                                                type="checkbox"
+                                                checked={annSendEmail}
+                                                onChange={(e) => setAnnSendEmail(e.target.checked)}
+                                            />
+                                            <span>Email</span>
+                                        </label>
+                                        <label className="flex items-center gap-2">
+                                            <input
+                                                type="checkbox"
+                                                checked={annSendSms}
+                                                onChange={(e) => setAnnSendSms(e.target.checked)}
+                                            />
+                                            <span>SMS</span>
+                                        </label>
+                                        <label className="flex items-center gap-2">
+                                            <input
+                                                type="checkbox"
+                                                checked={annSendPush}
+                                                onChange={(e) => setAnnSendPush(e.target.checked)}
+                                            />
+                                            <span>Push</span>
+                                        </label>
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        disabled={annSending || (!annNotifyParents && !annNotifyAthletes)}
+                                        className="rounded-md bg-ts-accent px-3 py-1.5 text-sm font-medium text-ts-accent-fg disabled:opacity-50"
+                                    >
+                                        {annSending ? 'Αποστολή…' : 'Αποστολή ανακοίνωσης'}
+                                    </button>
+                                </form>
+                            )}
+                        </PortalPanel>
+
+                        <PortalPanel title="Τελευταίες Ανακοινώσεις" icon="📢">
+                            {announcements.length === 0 ? (
+                                <p className="text-sm text-ts-muted">Δεν υπάρχουν ανακοινώσεις.</p>
+                            ) : (
+                                <ul className="divide-y divide-ts-border">
+                                    {announcements.map((a) => (
+                                        <li key={a.id} className="py-2">
+                                            <strong className="text-sm">{a.title}</strong>
+                                            {a.image_url ? (
+                                                <img
+                                                    src={a.image_url}
+                                                    alt=""
+                                                    className="mt-2 max-h-36 w-full rounded-md object-cover"
+                                                />
+                                            ) : null}
+                                            {a.body ? (
+                                                <p className="mt-1 whitespace-pre-wrap text-sm text-ts-fg-soft">
+                                                    {a.body}
+                                                </p>
+                                            ) : null}
+                                            <div className="text-xs text-ts-muted">
+                                                {a.published_at ? formatDate(a.published_at) : ''}
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </PortalPanel>
+                    </div>
                 ) : null}
             </main>
 

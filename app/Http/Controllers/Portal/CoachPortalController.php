@@ -3,15 +3,21 @@
 namespace App\Http\Controllers\Portal;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\SendAnnouncementEmailsJob;
+use App\Jobs\SendAnnouncementPushJob;
+use App\Jobs\SendAnnouncementSmsJob;
 use App\Models\AcademyClass;
 use App\Models\Announcement;
 use App\Models\Athlete;
 use App\Models\Attendance;
 use App\Models\Coach;
 use App\Models\Facility;
+use App\Models\ParentAthleteLink;
 use App\Models\Scopes\ClubScope;
 use App\Models\Training;
+use App\Services\Audit\ClubActivityLogger;
 use App\Support\CoachClassScope;
+use App\Support\PreferredNotifyEmail;
 use App\Support\Roles;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -167,6 +173,201 @@ class CoachPortalController extends Controller
         }
 
         return back()->with('success', 'Οι παρουσίες αποθηκεύτηκαν.');
+    }
+
+    public function storeAnnouncement(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+        $club = $request->attributes->get('currentClub') ?? $user?->activeClub;
+        $role = $user?->is_platform_admin
+            ? Roles::PLATFORM_ADMIN
+            : $user?->roleInClub($club);
+
+        if ($role !== Roles::COACH) {
+            abort(403);
+        }
+
+        $clubId = $user?->active_club_id;
+        $coach = $this->resolveCoach($user, $clubId);
+        if (! $coach || ! $clubId) {
+            return back()->with('error', 'Δεν βρέθηκε σύνδεση προπονητή.');
+        }
+
+        $ownClassIds = AcademyClass::query()->withoutGlobalScopes()
+            ->where('club_id', $clubId)
+            ->where('coach_id', $coach->id)
+            ->pluck('id')
+            ->map(fn ($id) => (string) $id)
+            ->all();
+
+        if ($ownClassIds === []) {
+            return back()->withErrors([
+                'class_ids' => 'Δεν έχετε συνδεδεμένα τμήματα για αποστολή ανακοίνωσης.',
+            ]);
+        }
+
+        $data = $request->validate([
+            'title' => ['required', 'string', 'max:200'],
+            'body' => ['required', 'string'],
+            'class_ids' => ['nullable', 'array'],
+            'class_ids.*' => ['uuid'],
+            'notify_parents' => ['sometimes', 'boolean'],
+            'notify_athletes' => ['sometimes', 'boolean'],
+            'send_email' => ['sometimes', 'boolean'],
+            'send_sms' => ['sometimes', 'boolean'],
+            'send_push' => ['sometimes', 'boolean'],
+        ]);
+
+        $selectedClassIds = array_values(array_intersect(
+            array_map('strval', $data['class_ids'] ?? []),
+            $ownClassIds,
+        ));
+        if ($selectedClassIds === []) {
+            $selectedClassIds = $ownClassIds;
+        }
+
+        $notifyParents = array_key_exists('notify_parents', $data)
+            ? filter_var($data['notify_parents'], FILTER_VALIDATE_BOOLEAN)
+            : true;
+        $notifyAthletes = filter_var($data['notify_athletes'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $roles = array_values(array_filter([
+            $notifyParents ? 'parent' : null,
+            $notifyAthletes ? 'athlete' : null,
+        ]));
+        if ($roles === []) {
+            $roles = ['parent'];
+        }
+
+        $sendEmail = array_key_exists('send_email', $data)
+            ? filter_var($data['send_email'], FILTER_VALIDATE_BOOLEAN)
+            : true;
+        $sendSms = filter_var($data['send_sms'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $sendPush = filter_var($data['send_push'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+        $audience = [
+            'roles' => $roles,
+            'class_ids' => $selectedClassIds,
+            'sport' => '',
+            'parent_ids' => [],
+            'coach_ids' => [],
+            'athlete_ids' => [],
+            'staff_ids' => [],
+        ];
+
+        $athletes = Athlete::query()->withoutGlobalScopes()
+            ->where('club_id', $clubId)
+            ->where('status', '!=', 'inactive')
+            ->whereHas('classes', fn ($q) => $q->whereIn('academy_classes.id', $selectedClassIds))
+            ->get(['id', 'email', 'phone', 'meta']);
+
+        $emails = [];
+        $phones = [];
+        $addEmail = function (?string $email) use (&$emails): void {
+            $email = trim((string) $email);
+            if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $emails[$email] = true;
+            }
+        };
+        $addPhone = function (?string $phone) use (&$phones): void {
+            $phone = preg_replace('/\s+/', '', trim((string) $phone)) ?? '';
+            if (strlen($phone) >= 8) {
+                $phones[$phone] = true;
+            }
+        };
+
+        foreach ($athletes as $athlete) {
+            $addEmail(PreferredNotifyEmail::resolvePrimary($athlete));
+            $addPhone(is_string($athlete->phone ?? null) ? $athlete->phone : null);
+        }
+
+        $emailList = array_keys($emails);
+        $phoneList = array_keys($phones);
+
+        $athleteIds = $athletes->pluck('id')->map(fn ($id) => (string) $id)->all();
+        $pushUserIds = $athleteIds === []
+            ? []
+            : ParentAthleteLink::query()
+                ->withoutGlobalScopes()
+                ->where('club_id', $clubId)
+                ->whereIn('athlete_id', $athleteIds)
+                ->where('receives_push', true)
+                ->pluck('parent_user_id')
+                ->filter()
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->values()
+                ->all();
+
+        if ($sendEmail && $emailList === []) {
+            return back()->withErrors([
+                'send_email' => 'Ενεργή αποστολή email, αλλά δεν βρέθηκαν παραλήπτες με email στα επιλεγμένα τμήματα.',
+            ])->withInput();
+        }
+        if ($sendSms && $phoneList === []) {
+            return back()->withErrors([
+                'send_sms' => 'Ενεργή αποστολή SMS, αλλά δεν βρέθηκαν τηλέφωνα στα επιλεγμένα τμήματα.',
+            ])->withInput();
+        }
+
+        $row = Announcement::query()->withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(),
+            'club_id' => $clubId,
+            'created_by' => $user?->id,
+            'title' => $data['title'],
+            'body' => $data['body'],
+            'audience' => $audience,
+            'published_at' => now(),
+            'meta' => [
+                'send_email' => $sendEmail,
+                'send_sms' => $sendSms,
+                'send_push' => $sendPush,
+                'source' => 'coach_portal',
+            ],
+        ]);
+
+        app(ClubActivityLogger::class)->record(
+            $clubId,
+            'announcement.create',
+            'Δημιούργησε ανακοίνωση (προπονητής)',
+            sprintf('«%s» · τμήματα: %d', $row->title, count($selectedClassIds)),
+            'announcement',
+            $row->id,
+        );
+
+        $channels = [];
+        if ($sendEmail && $emailList !== []) {
+            SendAnnouncementEmailsJob::dispatch(
+                $clubId,
+                $row->id,
+                $data['title'],
+                $data['body'],
+                $emailList,
+                null,
+            );
+            $channels[] = 'email σε '.count($emailList).' παραλήπτες';
+        }
+        if ($sendSms && $phoneList !== []) {
+            SendAnnouncementSmsJob::dispatch($clubId, $row->id, $data['title'], $data['body'], $phoneList);
+            $channels[] = 'SMS σε '.count($phoneList);
+        }
+        if ($sendPush && $pushUserIds !== []) {
+            SendAnnouncementPushJob::dispatch(
+                $clubId,
+                $row->id,
+                $data['title'],
+                $data['body'],
+                $pushUserIds,
+                route('portal.coach'),
+            );
+            $channels[] = 'push σε '.count($pushUserIds);
+        }
+
+        return back()->with(
+            'success',
+            $channels !== []
+                ? 'Η ανακοίνωση δημοσιεύτηκε. Στάλθηκε: '.implode(', ', $channels).'.'
+                : 'Η ανακοίνωση δημοσιεύτηκε.'
+        );
     }
 
     private function resolveCoach($user, ?string $clubId): ?Coach

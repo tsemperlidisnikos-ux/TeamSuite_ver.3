@@ -326,6 +326,9 @@ Route::middleware('auth')->group(function () {
         ->name('push.unsubscribe');
     Route::get('/app/coach', [CoachPortalController::class, 'index'])->name('portal.coach');
     Route::post('/app/coach/attendance', [CoachPortalController::class, 'saveAttendance'])->name('portal.coach.attendance');
+    Route::post('/app/coach/announcements', [CoachPortalController::class, 'storeAnnouncement'])
+        ->middleware('throttle:20,1')
+        ->name('portal.coach.announcements.store');
     Route::get('/app/athlete', AthletePortalController::class)->name('portal.athlete');
 });
 

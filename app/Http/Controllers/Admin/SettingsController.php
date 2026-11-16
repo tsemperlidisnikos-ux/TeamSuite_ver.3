@@ -645,7 +645,7 @@ class SettingsController extends Controller
         }
 
         $permissions = array_values($data['permissions'] ?? []);
-        if ($data['role'] === 'parent' && ! in_array('announcements', $permissions, true)) {
+        if (in_array($data['role'], ['parent', 'coach'], true) && ! in_array('announcements', $permissions, true)) {
             $permissions[] = 'announcements';
         }
 
@@ -687,7 +687,7 @@ class SettingsController extends Controller
         }
 
         $permissions = array_values($data['permissions'] ?? []);
-        if ($data['role'] === 'parent' && ! in_array('announcements', $permissions, true)) {
+        if (in_array($data['role'], ['parent', 'coach'], true) && ! in_array('announcements', $permissions, true)) {
             $permissions[] = 'announcements';
         }
 

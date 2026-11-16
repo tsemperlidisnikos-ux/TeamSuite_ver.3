@@ -143,18 +143,17 @@ class User extends Authenticatable
 
     /**
      * Parents may view announcements (send is blocked in controllers/UI).
+     * Coaches always keep announcements so they can send from admin or portal.
      *
      * @param  list<string>  $permissions
      * @return list<string>
      */
     private function applyParentModulePolicy(string $role, array $permissions): array
     {
-        if ($role !== 'parent') {
-            return $permissions;
-        }
-
-        if (! in_array('announcements', $permissions, true)) {
-            $permissions[] = 'announcements';
+        if ($role === 'parent' || $role === 'coach') {
+            if (! in_array('announcements', $permissions, true)) {
+                $permissions[] = 'announcements';
+            }
         }
 
         return array_values(array_unique($permissions));
