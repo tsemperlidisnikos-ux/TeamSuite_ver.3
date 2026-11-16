@@ -34,9 +34,79 @@ function upcomingLine(t) {
     return `${day} ${date}, ${time}, ${t.class_name}${t.location ? ` - ${t.location}` : ''}`;
 }
 
+function toggleId(list, id) {
+    return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+}
+
+function RecipientChecklist({ title, rows, selectedIds, onToggle, emptyText }) {
+    const [query, setQuery] = useState('');
+    const filtered = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        if (!q) {
+            return rows;
+        }
+        return rows.filter(
+            (row) =>
+                (row.label || '').toLowerCase().includes(q) ||
+                (row.hint || '').toLowerCase().includes(q) ||
+                (row.name || '').toLowerCase().includes(q),
+        );
+    }, [rows, query]);
+
+    return (
+        <div>
+            <div className="mb-1 flex items-center justify-between gap-2">
+                <p className="text-xs text-ts-muted">
+                    {title}
+                    {selectedIds.length > 0 ? ` · ${selectedIds.length}` : ''}
+                </p>
+                {rows.length > 6 ? (
+                    <input
+                        type="search"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder="Αναζήτηση…"
+                        className="w-36 rounded-md border border-ts-border bg-ts-surface px-2 py-1 text-xs"
+                    />
+                ) : null}
+            </div>
+            {rows.length === 0 ? (
+                <p className="text-xs text-ts-muted">{emptyText}</p>
+            ) : (
+                <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-ts-border bg-ts-surface p-2">
+                    {filtered.length === 0 ? (
+                        <p className="text-xs text-ts-muted">Κανένα αποτέλεσμα.</p>
+                    ) : (
+                        filtered.map((row) => (
+                            <label
+                                key={row.id}
+                                className="flex items-start gap-2 rounded px-1 py-0.5 text-sm hover:bg-ts-bg"
+                            >
+                                <input
+                                    type="checkbox"
+                                    className="mt-0.5"
+                                    checked={selectedIds.includes(row.id)}
+                                    onChange={() => onToggle(row.id)}
+                                />
+                                <span className="min-w-0">
+                                    <span className="block truncate">{row.label || row.name}</span>
+                                    {row.hint ? (
+                                        <span className="block truncate text-xs text-ts-muted">{row.hint}</span>
+                                    ) : null}
+                                </span>
+                            </label>
+                        ))
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function CoachHome({
     coach = null,
     classes = [],
+    audience_options = {},
     trainings = [],
     announcements = [],
     classes_count = 0,
@@ -47,6 +117,7 @@ export default function CoachHome({
     today = new Date().toISOString().slice(0, 10),
 }) {
     const flash = usePage().props.flash;
+    const pageErrors = usePage().props.errors || {};
     const [tab, setTab] = useState('home');
     const [classId, setClassId] = useState(classes[0]?.id || '');
     const [date, setDate] = useState(attendance_date || today);
@@ -57,26 +128,31 @@ export default function CoachHome({
     const [annTitle, setAnnTitle] = useState('');
     const [annBody, setAnnBody] = useState('');
     const [annClassIds, setAnnClassIds] = useState([]);
-    const [annNotifyParents, setAnnNotifyParents] = useState(true);
-    const [annNotifyAthletes, setAnnNotifyAthletes] = useState(false);
+    const [annAthleteIds, setAnnAthleteIds] = useState([]);
+    const [annCoachIds, setAnnCoachIds] = useState([]);
+    const [annStaffIds, setAnnStaffIds] = useState([]);
     const [annSendEmail, setAnnSendEmail] = useState(true);
     const [annSendSms, setAnnSendSms] = useState(false);
     const [annSendPush, setAnnSendPush] = useState(false);
     const [annSending, setAnnSending] = useState(false);
+
+    const audienceAthletes = audience_options.athletes ?? [];
+    const audienceCoaches = audience_options.coaches ?? [];
+    const audienceStaff = audience_options.staff ?? [];
 
     useEffect(() => {
         applyPortalChrome('coach');
     }, []);
 
     useEffect(() => {
-        if (classes.length === 0) {
-            setAnnClassIds([]);
-            return;
-        }
-        setAnnClassIds((prev) =>
-            prev.length > 0 ? prev.filter((id) => classes.some((c) => c.id === id)) : classes.map((c) => c.id),
-        );
-    }, [classes]);
+        const athleteIds = new Set((audience_options.athletes ?? []).map((a) => a.id));
+        const coachIds = new Set((audience_options.coaches ?? []).map((c) => c.id));
+        const staffIds = new Set((audience_options.staff ?? []).map((s) => s.id));
+        setAnnClassIds((prev) => prev.filter((id) => classes.some((c) => c.id === id)));
+        setAnnAthleteIds((prev) => prev.filter((id) => athleteIds.has(id)));
+        setAnnCoachIds((prev) => prev.filter((id) => coachIds.has(id)));
+        setAnnStaffIds((prev) => prev.filter((id) => staffIds.has(id)));
+    }, [classes, audience_options]);
 
     useEffect(() => {
         if (attendance_date && attendance_date !== date) {
@@ -122,15 +198,28 @@ export default function CoachHome({
         );
     }
 
-    function toggleAnnClass(id) {
-        setAnnClassIds((prev) =>
-            prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    const filteredAudienceAthletes = useMemo(() => {
+        if (annClassIds.length === 0) {
+            return audienceAthletes;
+        }
+        return audienceAthletes.filter((row) =>
+            (row.class_ids || []).some((id) => annClassIds.includes(id)),
         );
-    }
+    }, [audienceAthletes, annClassIds]);
+
+    const hasRecipients =
+        annClassIds.length > 0 ||
+        annAthleteIds.length > 0 ||
+        annCoachIds.length > 0 ||
+        annStaffIds.length > 0;
+
+    const canComposeAnnouncement =
+        Boolean(coach) &&
+        (classes.length > 0 || audienceCoaches.length > 0 || audienceStaff.length > 0);
 
     function sendAnnouncement(e) {
         e.preventDefault();
-        if (!annTitle.trim() || !annBody.trim()) {
+        if (!annTitle.trim() || !annBody.trim() || !hasRecipients) {
             return;
         }
         setAnnSending(true);
@@ -140,8 +229,9 @@ export default function CoachHome({
                 title: annTitle.trim(),
                 body: annBody.trim(),
                 class_ids: annClassIds,
-                notify_parents: annNotifyParents,
-                notify_athletes: annNotifyAthletes,
+                athlete_ids: annAthleteIds,
+                coach_ids: annCoachIds,
+                staff_ids: annStaffIds,
                 send_email: annSendEmail,
                 send_sms: annSendSms,
                 send_push: annSendPush,
@@ -152,6 +242,10 @@ export default function CoachHome({
                 onSuccess: () => {
                     setAnnTitle('');
                     setAnnBody('');
+                    setAnnClassIds([]);
+                    setAnnAthleteIds([]);
+                    setAnnCoachIds([]);
+                    setAnnStaffIds([]);
                 },
             },
         );
@@ -444,9 +538,9 @@ export default function CoachHome({
                                 <p className="text-sm text-amber-800">
                                     Ο λογαριασμός δεν είναι συνδεδεμένος με καρτέλα προπονητή.
                                 </p>
-                            ) : classes.length === 0 ? (
+                            ) : !canComposeAnnouncement ? (
                                 <p className="text-sm text-ts-muted">
-                                    Δεν έχετε τμήματα για αποστολή ανακοίνωσης.
+                                    Δεν υπάρχουν διαθέσιμοι παραλήπτες για ανακοίνωση.
                                 </p>
                             ) : (
                                 <form onSubmit={sendAnnouncement} className="space-y-3">
@@ -471,42 +565,46 @@ export default function CoachHome({
                                             placeholder="Γράψτε την ανακοίνωση…"
                                         />
                                     </label>
-                                    <div>
-                                        <p className="mb-1 text-xs text-ts-muted">Τμήματα</p>
-                                        <div className="flex flex-wrap gap-2">
-                                            {classes.map((c) => (
-                                                <label
-                                                    key={c.id}
-                                                    className="flex items-center gap-2 rounded-md border border-ts-border bg-ts-surface px-2 py-1 text-sm"
-                                                >
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={annClassIds.includes(c.id)}
-                                                        onChange={() => toggleAnnClass(c.id)}
-                                                    />
-                                                    <span>{c.name}</span>
-                                                </label>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-wrap gap-3 text-sm">
-                                        <label className="flex items-center gap-2">
-                                            <input
-                                                type="checkbox"
-                                                checked={annNotifyParents}
-                                                onChange={(e) => setAnnNotifyParents(e.target.checked)}
-                                            />
-                                            <span>Γονείς</span>
-                                        </label>
-                                        <label className="flex items-center gap-2">
-                                            <input
-                                                type="checkbox"
-                                                checked={annNotifyAthletes}
-                                                onChange={(e) => setAnnNotifyAthletes(e.target.checked)}
-                                            />
-                                            <span>Αθλητές</span>
-                                        </label>
-                                    </div>
+                                    <p className="text-xs text-ts-muted">
+                                        Επιλέξτε παραλήπτες: τμήμα (γονείς), αθλητές, προπονητές ή προσωπικό.
+                                    </p>
+                                    <RecipientChecklist
+                                        title="Τμήματα"
+                                        rows={classes.map((c) => ({ id: c.id, label: c.name }))}
+                                        selectedIds={annClassIds}
+                                        onToggle={(id) => setAnnClassIds((prev) => toggleId(prev, id))}
+                                        emptyText="Δεν έχετε συνδεδεμένα τμήματα."
+                                    />
+                                    <RecipientChecklist
+                                        title="Αθλητές"
+                                        rows={filteredAudienceAthletes}
+                                        selectedIds={annAthleteIds}
+                                        onToggle={(id) => setAnnAthleteIds((prev) => toggleId(prev, id))}
+                                        emptyText="Δεν υπάρχουν αθλητές στα τμήματά σας."
+                                    />
+                                    <RecipientChecklist
+                                        title="Προπονητές"
+                                        rows={audienceCoaches}
+                                        selectedIds={annCoachIds}
+                                        onToggle={(id) => setAnnCoachIds((prev) => toggleId(prev, id))}
+                                        emptyText="Δεν υπάρχουν ενεργοί προπονητές."
+                                    />
+                                    <RecipientChecklist
+                                        title="Προσωπικό"
+                                        rows={audienceStaff}
+                                        selectedIds={annStaffIds}
+                                        onToggle={(id) => setAnnStaffIds((prev) => toggleId(prev, id))}
+                                        emptyText="Δεν υπάρχει ενεργό προσωπικό."
+                                    />
+                                    {pageErrors.class_ids ? (
+                                        <p className="text-sm text-rose-700">{pageErrors.class_ids}</p>
+                                    ) : null}
+                                    {pageErrors.send_email ? (
+                                        <p className="text-sm text-rose-700">{pageErrors.send_email}</p>
+                                    ) : null}
+                                    {pageErrors.send_sms ? (
+                                        <p className="text-sm text-rose-700">{pageErrors.send_sms}</p>
+                                    ) : null}
                                     <div className="flex flex-wrap gap-3 text-sm">
                                         <label className="flex items-center gap-2">
                                             <input
@@ -535,7 +633,7 @@ export default function CoachHome({
                                     </div>
                                     <button
                                         type="submit"
-                                        disabled={annSending || (!annNotifyParents && !annNotifyAthletes)}
+                                        disabled={annSending || !hasRecipients}
                                         className="rounded-md bg-ts-accent px-3 py-1.5 text-sm font-medium text-ts-accent-fg disabled:opacity-50"
                                     >
                                         {annSending ? 'Αποστολή…' : 'Αποστολή ανακοίνωσης'}

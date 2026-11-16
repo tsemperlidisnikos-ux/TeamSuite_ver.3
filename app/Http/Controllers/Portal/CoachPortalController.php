@@ -14,6 +14,7 @@ use App\Models\Coach;
 use App\Models\Facility;
 use App\Models\ParentAthleteLink;
 use App\Models\Scopes\ClubScope;
+use App\Models\StaffMember;
 use App\Models\Training;
 use App\Services\Audit\ClubActivityLogger;
 use App\Support\CoachClassScope;
@@ -87,6 +88,7 @@ class CoachPortalController extends Controller
 
         $rosterByClass = $this->rosterByClass($clubId, $myClasses);
         $attendanceByClass = $this->attendanceForDate($clubId, $classIds, $date);
+        $audienceOptions = $this->announcementAudienceOptions($clubId, $classIds);
 
         return Inertia::render('Portals/CoachHome', [
             'coach' => $coach ? [
@@ -98,6 +100,7 @@ class CoachPortalController extends Controller
                 'id' => $c->id,
                 'name' => $c->name,
             ])->values(),
+            'audience_options' => $audienceOptions,
             'trainings' => $trainings->values(),
             'announcements' => $announcements->map(fn (Announcement $a) => [
                 'id' => $a->id,
@@ -200,19 +203,41 @@ class CoachPortalController extends Controller
             ->map(fn ($id) => (string) $id)
             ->all();
 
-        if ($ownClassIds === []) {
-            return back()->withErrors([
-                'class_ids' => 'Δεν έχετε συνδεδεμένα τμήματα για αποστολή ανακοίνωσης.',
-            ]);
-        }
+        $ownAthleteIds = $ownClassIds === []
+            ? []
+            : Athlete::query()->withoutGlobalScopes()
+                ->where('club_id', $clubId)
+                ->where('status', '!=', 'inactive')
+                ->whereHas('classes', fn ($q) => $q->whereIn('academy_classes.id', $ownClassIds))
+                ->pluck('id')
+                ->map(fn ($id) => (string) $id)
+                ->all();
+
+        $clubCoachIds = Coach::query()->withoutGlobalScopes()
+            ->where('club_id', $clubId)
+            ->where('is_active', true)
+            ->pluck('id')
+            ->map(fn ($id) => (string) $id)
+            ->all();
+
+        $clubStaffIds = StaffMember::query()->withoutGlobalScopes()
+            ->where('club_id', $clubId)
+            ->where('is_active', true)
+            ->pluck('id')
+            ->map(fn ($id) => (string) $id)
+            ->all();
 
         $data = $request->validate([
             'title' => ['required', 'string', 'max:200'],
             'body' => ['required', 'string'],
             'class_ids' => ['nullable', 'array'],
             'class_ids.*' => ['uuid'],
-            'notify_parents' => ['sometimes', 'boolean'],
-            'notify_athletes' => ['sometimes', 'boolean'],
+            'athlete_ids' => ['nullable', 'array'],
+            'athlete_ids.*' => ['uuid'],
+            'coach_ids' => ['nullable', 'array'],
+            'coach_ids.*' => ['uuid'],
+            'staff_ids' => ['nullable', 'array'],
+            'staff_ids.*' => ['uuid'],
             'send_email' => ['sometimes', 'boolean'],
             'send_sms' => ['sometimes', 'boolean'],
             'send_push' => ['sometimes', 'boolean'],
@@ -222,20 +247,42 @@ class CoachPortalController extends Controller
             array_map('strval', $data['class_ids'] ?? []),
             $ownClassIds,
         ));
-        if ($selectedClassIds === []) {
-            $selectedClassIds = $ownClassIds;
+        $selectedAthleteIds = array_values(array_intersect(
+            array_map('strval', $data['athlete_ids'] ?? []),
+            $ownAthleteIds,
+        ));
+        $selectedCoachIds = array_values(array_intersect(
+            array_map('strval', $data['coach_ids'] ?? []),
+            $clubCoachIds,
+        ));
+        $selectedStaffIds = array_values(array_intersect(
+            array_map('strval', $data['staff_ids'] ?? []),
+            $clubStaffIds,
+        ));
+
+        if (
+            $selectedClassIds === []
+            && $selectedAthleteIds === []
+            && $selectedCoachIds === []
+            && $selectedStaffIds === []
+        ) {
+            return back()->withErrors([
+                'class_ids' => 'Επιλέξτε τουλάχιστον ένα τμήμα, αθλητή, προπονητή ή μέλος προσωπικού.',
+            ])->withInput();
         }
 
-        $notifyParents = array_key_exists('notify_parents', $data)
-            ? filter_var($data['notify_parents'], FILTER_VALIDATE_BOOLEAN)
-            : true;
-        $notifyAthletes = filter_var($data['notify_athletes'] ?? false, FILTER_VALIDATE_BOOLEAN);
-        $roles = array_values(array_filter([
-            $notifyParents ? 'parent' : null,
-            $notifyAthletes ? 'athlete' : null,
-        ]));
-        if ($roles === []) {
-            $roles = ['parent'];
+        $roles = [];
+        if ($selectedClassIds !== []) {
+            $roles[] = 'parent';
+        }
+        if ($selectedAthleteIds !== []) {
+            $roles[] = 'athlete';
+        }
+        if ($selectedCoachIds !== []) {
+            $roles[] = 'coach';
+        }
+        if ($selectedStaffIds !== []) {
+            $roles[] = 'staff';
         }
 
         $sendEmail = array_key_exists('send_email', $data)
@@ -245,20 +292,14 @@ class CoachPortalController extends Controller
         $sendPush = filter_var($data['send_push'] ?? false, FILTER_VALIDATE_BOOLEAN);
 
         $audience = [
-            'roles' => $roles,
+            'roles' => array_values($roles),
             'class_ids' => $selectedClassIds,
             'sport' => '',
             'parent_ids' => [],
-            'coach_ids' => [],
-            'athlete_ids' => [],
-            'staff_ids' => [],
+            'coach_ids' => $selectedCoachIds,
+            'athlete_ids' => $selectedAthleteIds,
+            'staff_ids' => $selectedStaffIds,
         ];
-
-        $athletes = Athlete::query()->withoutGlobalScopes()
-            ->where('club_id', $clubId)
-            ->where('status', '!=', 'inactive')
-            ->whereHas('classes', fn ($q) => $q->whereIn('academy_classes.id', $selectedClassIds))
-            ->get(['id', 'email', 'phone', 'meta']);
 
         $emails = [];
         $phones = [];
@@ -275,21 +316,72 @@ class CoachPortalController extends Controller
             }
         };
 
-        foreach ($athletes as $athlete) {
-            $addEmail(PreferredNotifyEmail::resolvePrimary($athlete));
-            $addPhone(is_string($athlete->phone ?? null) ? $athlete->phone : null);
+        $pushAthleteIds = [];
+
+        if ($selectedClassIds !== []) {
+            $classAthletes = Athlete::query()->withoutGlobalScopes()
+                ->where('club_id', $clubId)
+                ->where('status', '!=', 'inactive')
+                ->whereHas('classes', fn ($q) => $q->whereIn('academy_classes.id', $selectedClassIds))
+                ->get(['id', 'email', 'phone', 'guardian_phone', 'mother_phone', 'emergency_phone', 'meta']);
+
+            foreach ($classAthletes as $athlete) {
+                $addEmail(PreferredNotifyEmail::resolvePrimary($athlete));
+                $addPhone(is_string($athlete->phone ?? null) ? $athlete->phone : null);
+                $addPhone(is_string($athlete->guardian_phone ?? null) ? $athlete->guardian_phone : null);
+                $addPhone(is_string($athlete->mother_phone ?? null) ? $athlete->mother_phone : null);
+                $addPhone(is_string($athlete->emergency_phone ?? null) ? $athlete->emergency_phone : null);
+                $pushAthleteIds[] = (string) $athlete->id;
+            }
+        }
+
+        if ($selectedAthleteIds !== []) {
+            $pickedAthletes = Athlete::query()->withoutGlobalScopes()
+                ->where('club_id', $clubId)
+                ->whereIn('id', $selectedAthleteIds)
+                ->get(['id', 'email', 'phone', 'meta']);
+
+            foreach ($pickedAthletes as $athlete) {
+                $addEmail(PreferredNotifyEmail::resolvePrimary($athlete));
+                $addPhone(is_string($athlete->phone ?? null) ? $athlete->phone : null);
+                $pushAthleteIds[] = (string) $athlete->id;
+            }
+        }
+
+        if ($selectedCoachIds !== []) {
+            $pickedCoaches = Coach::query()->withoutGlobalScopes()
+                ->where('club_id', $clubId)
+                ->whereIn('id', $selectedCoachIds)
+                ->get(['email', 'phone']);
+
+            foreach ($pickedCoaches as $pickedCoach) {
+                $addEmail(is_string($pickedCoach->email ?? null) ? $pickedCoach->email : null);
+                $addPhone(is_string($pickedCoach->phone ?? null) ? $pickedCoach->phone : null);
+            }
+        }
+
+        if ($selectedStaffIds !== []) {
+            $pickedStaff = StaffMember::query()->withoutGlobalScopes()
+                ->where('club_id', $clubId)
+                ->whereIn('id', $selectedStaffIds)
+                ->get(['email', 'phone']);
+
+            foreach ($pickedStaff as $member) {
+                $addEmail(is_string($member->email ?? null) ? $member->email : null);
+                $addPhone(is_string($member->phone ?? null) ? $member->phone : null);
+            }
         }
 
         $emailList = array_keys($emails);
         $phoneList = array_keys($phones);
+        $pushAthleteIds = array_values(array_unique($pushAthleteIds));
 
-        $athleteIds = $athletes->pluck('id')->map(fn ($id) => (string) $id)->all();
-        $pushUserIds = $athleteIds === []
+        $pushUserIds = $pushAthleteIds === []
             ? []
             : ParentAthleteLink::query()
                 ->withoutGlobalScopes()
                 ->where('club_id', $clubId)
-                ->whereIn('athlete_id', $athleteIds)
+                ->whereIn('athlete_id', $pushAthleteIds)
                 ->where('receives_push', true)
                 ->pluck('parent_user_id')
                 ->filter()
@@ -300,12 +392,12 @@ class CoachPortalController extends Controller
 
         if ($sendEmail && $emailList === []) {
             return back()->withErrors([
-                'send_email' => 'Ενεργή αποστολή email, αλλά δεν βρέθηκαν παραλήπτες με email στα επιλεγμένα τμήματα.',
+                'send_email' => 'Ενεργή αποστολή email, αλλά δεν βρέθηκαν παραλήπτες με email.',
             ])->withInput();
         }
         if ($sendSms && $phoneList === []) {
             return back()->withErrors([
-                'send_sms' => 'Ενεργή αποστολή SMS, αλλά δεν βρέθηκαν τηλέφωνα στα επιλεγμένα τμήματα.',
+                'send_sms' => 'Ενεργή αποστολή SMS, αλλά δεν βρέθηκαν τηλέφωνα.',
             ])->withInput();
         }
 
@@ -329,7 +421,14 @@ class CoachPortalController extends Controller
             $clubId,
             'announcement.create',
             'Δημιούργησε ανακοίνωση (προπονητής)',
-            sprintf('«%s» · τμήματα: %d', $row->title, count($selectedClassIds)),
+            sprintf(
+                '«%s» · τμήματα: %d · αθλητές: %d · προπονητές: %d · προσωπικό: %d',
+                $row->title,
+                count($selectedClassIds),
+                count($selectedAthleteIds),
+                count($selectedCoachIds),
+                count($selectedStaffIds),
+            ),
             'announcement',
             $row->id,
         );
@@ -368,6 +467,100 @@ class CoachPortalController extends Controller
                 ? 'Η ανακοίνωση δημοσιεύτηκε. Στάλθηκε: '.implode(', ', $channels).'.'
                 : 'Η ανακοίνωση δημοσιεύτηκε.'
         );
+    }
+
+    /**
+     * @param  Collection<int, string>  $ownClassIds
+     * @return array{
+     *     athletes: list<array{id: string, label: string, hint: string, class_ids: list<string>}>,
+     *     coaches: list<array{id: string, label: string, hint: string}>,
+     *     staff: list<array{id: string, label: string, hint: string}>
+     * }
+     */
+    private function announcementAudienceOptions(?string $clubId, Collection $ownClassIds): array
+    {
+        if (! $clubId) {
+            return [
+                'athletes' => [],
+                'coaches' => [],
+                'staff' => [],
+            ];
+        }
+
+        $athletes = $ownClassIds->isEmpty()
+            ? collect()
+            : Athlete::query()->withoutGlobalScopes()
+                ->with('classes:id,name')
+                ->where('club_id', $clubId)
+                ->where('status', '!=', 'inactive')
+                ->whereHas('classes', fn ($q) => $q->whereIn('academy_classes.id', $ownClassIds))
+                ->orderBy('last_name')
+                ->orderBy('first_name')
+                ->limit(2_000)
+                ->get(['id', 'first_name', 'last_name', 'email'])
+                ->map(function (Athlete $a) use ($ownClassIds) {
+                    $classIds = $a->classes
+                        ->pluck('id')
+                        ->map(fn ($id) => (string) $id)
+                        ->intersect($ownClassIds->map(fn ($id) => (string) $id))
+                        ->values()
+                        ->all();
+                    $classNames = $a->classes
+                        ->filter(fn ($c) => in_array((string) $c->id, $classIds, true))
+                        ->pluck('name')
+                        ->filter()
+                        ->implode(', ');
+
+                    return [
+                        'id' => (string) $a->id,
+                        'label' => $this->formatSurnameFirstName($a->last_name, $a->first_name),
+                        'hint' => $classNames,
+                        'class_ids' => $classIds,
+                    ];
+                });
+
+        $coaches = Coach::query()->withoutGlobalScopes()
+            ->where('club_id', $clubId)
+            ->where('is_active', true)
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->get(['id', 'first_name', 'last_name', 'email', 'sport'])
+            ->map(fn (Coach $c) => [
+                'id' => (string) $c->id,
+                'label' => $this->formatSurnameFirstName($c->last_name, $c->first_name),
+                'hint' => trim((string) ($c->email ?: $c->sport ?: '')),
+            ]);
+
+        $staff = StaffMember::query()->withoutGlobalScopes()
+            ->where('club_id', $clubId)
+            ->where('is_active', true)
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->get(['id', 'first_name', 'last_name', 'email', 'role_title'])
+            ->map(fn (StaffMember $s) => [
+                'id' => (string) $s->id,
+                'label' => $this->formatSurnameFirstName($s->last_name, $s->first_name)
+                    ?: (string) ($s->email ?? '—'),
+                'hint' => trim((string) ($s->email ?: $s->role_title ?: '')),
+            ]);
+
+        return [
+            'athletes' => $athletes->values()->all(),
+            'coaches' => $coaches->values()->all(),
+            'staff' => $staff->values()->all(),
+        ];
+    }
+
+    private function formatSurnameFirstName(?string $lastName, ?string $firstName): string
+    {
+        $last = trim((string) $lastName);
+        $first = trim((string) $firstName);
+
+        if ($last !== '' && $first !== '') {
+            return $last.', '.$first;
+        }
+
+        return trim($last.' '.$first);
     }
 
     private function resolveCoach($user, ?string $clubId): ?Coach

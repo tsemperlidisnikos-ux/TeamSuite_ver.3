@@ -8,6 +8,7 @@ use App\Models\Announcement;
 use App\Models\Athlete;
 use App\Models\Club;
 use App\Models\Coach;
+use App\Models\StaffMember;
 use App\Models\User;
 use App\Support\Roles;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -92,8 +93,6 @@ class CoachCanSendAnnouncementsTest extends TestCase
                 'title' => 'Ακύρωση προπόνησης',
                 'body' => 'Η σημερινή προπόνηση ακυρώνεται.',
                 'class_ids' => [$class->id],
-                'notify_parents' => true,
-                'notify_athletes' => false,
                 'send_email' => true,
                 'send_sms' => false,
                 'send_push' => false,
@@ -113,7 +112,7 @@ class CoachCanSendAnnouncementsTest extends TestCase
     public function test_coach_cannot_target_another_coachs_class(): void
     {
         Queue::fake();
-        ['club' => $club, 'coachUser' => $user, 'class' => $ownClass] = $this->seedCoachWithClass();
+        ['club' => $club, 'coachUser' => $user] = $this->seedCoachWithClass();
 
         $otherCoach = Coach::query()->withoutGlobalScopes()->create([
             'id' => (string) Str::uuid(),
@@ -132,22 +131,126 @@ class CoachCanSendAnnouncementsTest extends TestCase
         ]);
 
         $this->actingAs($user)
+            ->from(route('portal.coach'))
             ->post(route('portal.coach.announcements.store'), [
                 'title' => 'Μόνο δικά μου',
                 'body' => 'Σώμα',
                 'class_ids' => [$otherClass->id],
-                'notify_parents' => true,
                 'send_email' => false,
+            ])
+            ->assertRedirect(route('portal.coach'))
+            ->assertSessionHasErrors('class_ids');
+
+        $this->assertNull(
+            Announcement::query()->withoutGlobalScopes()
+                ->where('title', 'Μόνο δικά μου')
+                ->first()
+        );
+    }
+
+    public function test_coach_can_target_athlete_coach_and_staff(): void
+    {
+        Queue::fake();
+        ['club' => $club, 'coachUser' => $user, 'coach' => $coach, 'athlete' => $athlete] = $this->seedCoachWithClass();
+
+        $otherCoach = Coach::query()->withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(),
+            'club_id' => $club->id,
+            'first_name' => 'Έλενα',
+            'last_name' => 'Συνάδελφος',
+            'email' => 'other-coach@example.com',
+            'is_active' => true,
+        ]);
+
+        $staff = StaffMember::query()->withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(),
+            'club_id' => $club->id,
+            'first_name' => 'Άννα',
+            'last_name' => 'Γραμματεία',
+            'email' => 'staff@example.com',
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('portal.coach.announcements.store'), [
+                'title' => 'Μεικτοί παραλήπτες',
+                'body' => 'Ενημέρωση',
+                'athlete_ids' => [$athlete->id],
+                'coach_ids' => [$otherCoach->id],
+                'staff_ids' => [$staff->id],
+                'send_email' => true,
+                'send_sms' => false,
+                'send_push' => false,
             ])
             ->assertRedirect();
 
         $row = Announcement::query()->withoutGlobalScopes()
-            ->where('title', 'Μόνο δικά μου')
+            ->where('title', 'Μεικτοί παραλήπτες')
             ->first();
 
         $this->assertNotNull($row);
-        $classIds = $row->audience['class_ids'] ?? [];
-        $this->assertNotContains($otherClass->id, $classIds);
-        $this->assertContains($ownClass->id, $classIds);
+        $this->assertContains($athlete->id, $row->audience['athlete_ids'] ?? []);
+        $this->assertContains($otherCoach->id, $row->audience['coach_ids'] ?? []);
+        $this->assertContains($staff->id, $row->audience['staff_ids'] ?? []);
+        $this->assertContains('athlete', $row->audience['roles'] ?? []);
+        $this->assertContains('coach', $row->audience['roles'] ?? []);
+        $this->assertContains('staff', $row->audience['roles'] ?? []);
+        $this->assertNotContains($coach->id, $row->audience['coach_ids'] ?? []);
+
+        Queue::assertPushed(SendAnnouncementEmailsJob::class, function (SendAnnouncementEmailsJob $job) use ($athlete, $otherCoach, $staff) {
+            return in_array($athlete->email, $job->emails, true)
+                && in_array($otherCoach->email, $job->emails, true)
+                && in_array($staff->email, $job->emails, true);
+        });
+    }
+
+    public function test_coach_cannot_target_athlete_outside_own_classes(): void
+    {
+        Queue::fake();
+        ['club' => $club, 'coachUser' => $user] = $this->seedCoachWithClass();
+
+        $otherCoach = Coach::query()->withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(),
+            'club_id' => $club->id,
+            'first_name' => 'Άλλος',
+            'last_name' => 'Προπονητής',
+            'is_active' => true,
+        ]);
+
+        $otherClass = AcademyClass::query()->withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(),
+            'club_id' => $club->id,
+            'coach_id' => $otherCoach->id,
+            'name' => 'Other',
+            'sport' => 'Μπάσκετ',
+        ]);
+
+        $foreignAthlete = Athlete::query()->withoutGlobalScopes()->create([
+            'id' => (string) Str::uuid(),
+            'club_id' => $club->id,
+            'first_name' => 'Ξένος',
+            'last_name' => 'Αθλητής',
+            'email' => 'foreign-athlete@example.com',
+            'status' => 'active',
+            'gdpr_consent' => 'pending',
+        ]);
+        $foreignAthlete->classes()->attach($otherClass->id);
+
+        $this->actingAs($user)
+            ->from(route('portal.coach'))
+            ->post(route('portal.coach.announcements.store'), [
+                'title' => 'Ξένος αθλητής',
+                'body' => 'Σώμα',
+                'athlete_ids' => [$foreignAthlete->id],
+                'send_email' => false,
+            ])
+            ->assertRedirect(route('portal.coach'))
+            ->assertSessionHasErrors('class_ids');
+
+        $this->assertNull(
+            Announcement::query()->withoutGlobalScopes()
+                ->where('title', 'Ξένος αθλητής')
+                ->first()
+        );
     }
 }
