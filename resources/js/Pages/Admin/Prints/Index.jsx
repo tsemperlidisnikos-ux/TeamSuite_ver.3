@@ -538,7 +538,7 @@ export default function Index({
     ]);
 
     const filtered = useMemo(() => {
-        return (athletes || []).filter((a) => {
+        const rows = (athletes || []).filter((a) => {
             if (sport && a.sport !== sport) return false;
             if (teamId && !(a.class_ids || []).includes(teamId)) return false;
             if (gender && a.gender !== gender) return false;
@@ -669,6 +669,18 @@ export default function Index({
 
             return true;
         });
+
+        if (selected === 'athlete-balances' || selected === 'debtors') {
+            return [...rows].sort((a, b) =>
+                `${a.last_name || ''} ${a.first_name || ''}`.localeCompare(
+                    `${b.last_name || ''} ${b.first_name || ''}`,
+                    'el',
+                    { sensitivity: 'base' },
+                ),
+            );
+        }
+
+        return rows;
     }, [
         athletes,
         sport,
