@@ -107,4 +107,40 @@ class TransactionNewEntryFormTest extends TestCase
         $this->assertSame(1096, (int) $row->receipt_seq);
         $this->assertSame(1097, (int) $series->fresh()->next_number);
     }
+
+    public function test_issuing_receipt_gamma_100_auto_suggests_101_next(): void
+    {
+        ['user' => $user, 'athlete' => $athlete, 'series' => $series] = $this->seedClub();
+
+        $series->update([
+            'range_from' => 100,
+            'range_to' => 999,
+            'next_number' => 100,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('admin.transactions.store'), [
+                'athlete_id' => $athlete->id,
+                'type' => 'payment',
+                'amount' => 30,
+                'day' => 17,
+                'month' => 11,
+                'year' => 2026,
+                'payment_method' => 'cash',
+                'receipt_series' => 'Γ',
+                'receipt_number' => '100',
+            ])
+            ->assertRedirect();
+
+        $this->assertSame(101, (int) $series->fresh()->next_number);
+
+        $this->actingAs($user)
+            ->get(route('admin.transactions.index', ['athlete_id' => $athlete->id]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Transactions/Index')
+                ->where('receiptSeries.0.series', 'Γ')
+                ->where('receiptSeries.0.next', 101)
+            );
+    }
 }
