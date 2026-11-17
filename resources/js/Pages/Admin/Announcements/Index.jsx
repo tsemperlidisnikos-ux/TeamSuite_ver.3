@@ -9,6 +9,8 @@ const ROLE_ID_KEYS = {
     staff: 'staff_ids',
 };
 
+const CLOTHING_PACKAGE_NONE = '__none__';
+
 const emptyForm = () => ({
     title: '',
     body: '',
@@ -19,6 +21,9 @@ const emptyForm = () => ({
     athlete_ids: [],
     staff_ids: [],
     sport: '',
+    association: '',
+    custom_charge_filter: '',
+    clothing_package_id: '',
     publish: true,
     send_email: true,
     send_sms: false,
@@ -71,6 +76,9 @@ export default function Index({
     items,
     classes = [],
     sports = [],
+    associations = [],
+    clothingPackages = [],
+    customChargeLabel = 'Προσαρμοσμένη χρέωση',
     filters,
     roleOptions = [],
     audienceOptions = {},
@@ -210,6 +218,10 @@ export default function Index({
         }
 
         if (pickerOpen === 'athlete') {
+            const association = (form.data.association || '').trim().toLowerCase();
+            const customCharge = form.data.custom_charge_filter || '';
+            const clothingId = (form.data.clothing_package_id || '').trim();
+
             return (audienceOptions.athletes || [])
                 .filter((row) => !sport || !row.sport || row.sport === sport)
                 .filter(
@@ -217,6 +229,30 @@ export default function Index({
                         classFilter.length === 0 ||
                         (row.class_ids || []).some((id) => classFilter.includes(id)),
                 )
+                .filter(
+                    (row) =>
+                        !association ||
+                        (row.club_name || '').trim().toLowerCase() === association,
+                )
+                .filter((row) => {
+                    if (customCharge === 'yes') {
+                        return !!row.custom_charge;
+                    }
+                    if (customCharge === 'no') {
+                        return !row.custom_charge;
+                    }
+                    return true;
+                })
+                .filter((row) => {
+                    if (!clothingId) {
+                        return true;
+                    }
+                    const ids = row.clothing_package_ids || [];
+                    if (clothingId === CLOTHING_PACKAGE_NONE) {
+                        return ids.length === 0;
+                    }
+                    return ids.includes(clothingId);
+                })
                 .filter(
                     (row) =>
                         !q ||
@@ -241,6 +277,9 @@ export default function Index({
         filteredClasses,
         audienceOptions,
         form.data.sport,
+        form.data.association,
+        form.data.custom_charge_filter,
+        form.data.clothing_package_id,
         form.data.class_ids,
     ]);
 
@@ -290,6 +329,9 @@ export default function Index({
             athlete_ids: audience.athlete_ids || [],
             staff_ids: audience.staff_ids || [],
             sport: audience.sport || '',
+            association: audience.association || '',
+            custom_charge_filter: audience.custom_charge_filter || '',
+            clothing_package_id: audience.clothing_package_id || '',
             publish: item.is_published,
             send_email: false,
             send_sms: false,
@@ -608,10 +650,17 @@ export default function Index({
                                     <span className="mb-1 block text-xs text-ts-muted">Σωματείο</span>
                                     <select
                                         className="w-full rounded-md border border-ts-border bg-ts-bg px-2 py-1.5 text-sm"
-                                        defaultValue=""
-                                        disabled
+                                        value={form.data.association}
+                                        onChange={(e) =>
+                                            form.setData('association', e.target.value)
+                                        }
                                     >
                                         <option value="">Όλα τα σωματεία</option>
+                                        {associations.map((name) => (
+                                            <option key={name} value={name}>
+                                                {name}
+                                            </option>
+                                        ))}
                                     </select>
                                 </label>
                                 <label className="block text-sm">
@@ -620,10 +669,14 @@ export default function Index({
                                     </span>
                                     <select
                                         className="w-full rounded-md border border-ts-border bg-ts-bg px-2 py-1.5 text-sm"
-                                        defaultValue=""
-                                        disabled
+                                        value={form.data.custom_charge_filter}
+                                        onChange={(e) =>
+                                            form.setData('custom_charge_filter', e.target.value)
+                                        }
                                     >
                                         <option value="">Όλα</option>
+                                        <option value="yes">{customChargeLabel}</option>
+                                        <option value="no">Όχι</option>
                                     </select>
                                 </label>
                                 <label className="block text-sm">
@@ -632,10 +685,18 @@ export default function Index({
                                     </span>
                                     <select
                                         className="w-full rounded-md border border-ts-border bg-ts-bg px-2 py-1.5 text-sm"
-                                        defaultValue=""
-                                        disabled
+                                        value={form.data.clothing_package_id}
+                                        onChange={(e) =>
+                                            form.setData('clothing_package_id', e.target.value)
+                                        }
                                     >
                                         <option value="">Όλα</option>
+                                        <option value={CLOTHING_PACKAGE_NONE}>Χωρίς πακέτο</option>
+                                        {clothingPackages.map((pkg) => (
+                                            <option key={pkg.id} value={pkg.id}>
+                                                {pkg.name}
+                                            </option>
+                                        ))}
                                     </select>
                                 </label>
                             </div>

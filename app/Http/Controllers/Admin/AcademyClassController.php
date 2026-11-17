@@ -9,8 +9,10 @@ use App\Models\AcademyClass;
 use App\Models\Athlete;
 use App\Models\AthleteTransaction;
 use App\Models\Attendance;
+use App\Models\ClubSeason;
 use App\Models\Coach;
 use App\Models\ScheduleSlot;
+use App\Models\Sport;
 use App\Models\Training;
 use App\Services\Trainings\MissingAttendanceTrainings;
 use App\Support\AdminClubResources;
@@ -38,11 +40,12 @@ class AcademyClassController extends Controller
         $config = $this->config();
         $q = trim((string) $request->query('q', ''));
         $sport = trim((string) $request->query('sport', ''));
+        $seasonId = trim((string) $request->query('season_id', ''));
         $tab = $request->query('tab', 'active') === 'inactive' ? 'inactive' : 'active';
 
         $items = $this->clubQuery(AcademyClass::class, $request)
             ->withCount('athletes')
-            ->with(['coach:id,first_name,last_name', 'season:id,name'])
+            ->with(['coach:id,first_name,last_name', 'season:id,name,starts_on,ends_on'])
             ->when($q !== '', function ($builder) use ($q) {
                 $like = '%'.$q.'%';
                 $op = config('database.default') === 'pgsql' ? 'ilike' : 'like';
@@ -52,7 +55,8 @@ class AcademyClassController extends Controller
                         ->orWhere('age_group', $op, $like);
                 });
             })
-            ->when($sport !== '', fn ($b) => $b->where('sport', 'like', '%'.$sport.'%'))
+            ->when($seasonId !== '', fn ($b) => $b->where('club_season_id', $seasonId))
+            ->when($sport !== '', fn ($b) => $b->where('sport', $sport))
             ->when($tab === 'inactive', function ($builder) {
                 $builder->where(function ($w) {
                     $w->where('meta->manual_inactive', true)
@@ -81,7 +85,8 @@ class AcademyClassController extends Controller
                 'gender' => $c->gender,
                 'monthly_fee' => $c->monthly_fee,
                 'athletes_count' => $c->athletes_count,
-                'season_name' => $c->season?->name,
+                'season_id' => $c->club_season_id,
+                'season_name' => $this->seasonShortLabel($c->season),
                 'coach_name' => $c->coach
                     ? trim($c->coach->last_name.' '.$c->coach->first_name)
                     : null,
@@ -90,6 +95,40 @@ class AcademyClassController extends Controller
 
         $missing = $this->missingAttendance->forClub($this->clubId($request));
         $firstMissing = $missing[0] ?? null;
+
+        $seasons = $this->clubQuery(ClubSeason::class, $request)
+            ->orderByDesc('starts_on')
+            ->orderBy('name')
+            ->get(['id', 'name', 'starts_on', 'ends_on', 'is_active'])
+            ->map(fn (ClubSeason $s) => [
+                'id' => $s->id,
+                'name' => $s->name,
+                'label' => $this->seasonShortLabel($s),
+                'is_active' => (bool) $s->is_active,
+            ])
+            ->values();
+
+        $registeredSports = $this->clubQuery(Sport::class, $request)
+            ->orderBy('name')
+            ->pluck('name')
+            ->map(fn ($name) => trim((string) $name))
+            ->filter()
+            ->values();
+
+        $classSports = $this->clubQuery(AcademyClass::class, $request)
+            ->whereNotNull('sport')
+            ->where('sport', '!=', '')
+            ->distinct()
+            ->orderBy('sport')
+            ->pluck('sport')
+            ->map(fn ($name) => trim((string) $name))
+            ->filter();
+
+        $sports = $registeredSports
+            ->merge($classSports)
+            ->unique(fn ($name) => mb_strtolower($name))
+            ->sort(fn ($a, $b) => strcasecmp($a, $b))
+            ->values();
 
         return Inertia::render('Admin/Classes/Index', [
             'title' => $config['title'],
@@ -102,7 +141,14 @@ class AcademyClassController extends Controller
                 'destroy' => 'admin.classes.destroy',
                 'show' => 'admin.classes.show',
             ],
-            'filters' => ['q' => $q, 'sport' => $sport, 'tab' => $tab],
+            'filters' => [
+                'q' => $q,
+                'sport' => $sport,
+                'season_id' => $seasonId,
+                'tab' => $tab,
+            ],
+            'seasons' => $seasons,
+            'sports' => $sports,
             'coaches' => $this->clubQuery(Coach::class, $request)
                 ->where('is_active', true)
                 ->orderBy('last_name')
@@ -115,6 +161,26 @@ class AcademyClassController extends Controller
                 ])
                 : route('admin.trainings.index'),
         ]);
+    }
+
+    private function seasonShortLabel(?ClubSeason $season): string
+    {
+        if (! $season) {
+            return '—';
+        }
+
+        $named = trim((string) $season->name);
+        if ($named !== '' && preg_match('/\d{4}[-–]\d{2,4}/u', $named, $match) === 1) {
+            return str_replace('–', '-', $match[0]);
+        }
+
+        $startYear = optional($season->starts_on)?->format('Y');
+        $endYearShort = optional($season->ends_on)?->format('y');
+        if ($startYear && $endYearShort) {
+            return $startYear.'-'.$endYearShort;
+        }
+
+        return $named !== '' ? $named : '—';
     }
 
     public function show(Request $request, string $id): Response

@@ -8,6 +8,8 @@ export default function Index({
     filters,
     routes,
     coaches = [],
+    seasons = [],
+    sports = [],
     missingAttendanceCount = 0,
     missingAttendanceHref = null,
 }) {
@@ -95,6 +97,11 @@ export default function Index({
                                 onChange={(e) => apply({ season_id: e.target.value })}
                             >
                                 <option value="">—</option>
+                                {seasons.map((s) => (
+                                    <option key={s.id} value={s.id}>
+                                        {s.label || s.name}
+                                    </option>
+                                ))}
                             </select>
                         </label>
                         <label className="flex items-center gap-1 text-sm text-ts-muted">
@@ -105,6 +112,11 @@ export default function Index({
                                 onChange={(e) => apply({ sport: e.target.value })}
                             >
                                 <option value="">Όλα</option>
+                                {sports.map((name) => (
+                                    <option key={name} value={name}>
+                                        {name}
+                                    </option>
+                                ))}
                             </select>
                         </label>
                         <button
@@ -192,12 +204,18 @@ export default function Index({
                             value={form.data.name}
                             onChange={(e) => form.setData('name', e.target.value)}
                         />
-                        <input
-                            placeholder="Άθλημα"
+                        <select
                             className="rounded-md border border-ts-border bg-ts-surface px-2 py-1.5 text-sm"
                             value={form.data.sport}
                             onChange={(e) => form.setData('sport', e.target.value)}
-                        />
+                        >
+                            <option value="">Άθλημα</option>
+                            {sports.map((name) => (
+                                <option key={name} value={name}>
+                                    {name}
+                                </option>
+                            ))}
+                        </select>
                         <input
                             placeholder="Κατηγορία / έτος"
                             className="rounded-md border border-ts-border bg-ts-surface px-2 py-1.5 text-sm"

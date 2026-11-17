@@ -9,7 +9,10 @@ use App\Jobs\SendAnnouncementPushJob;
 use App\Jobs\SendAnnouncementSmsJob;
 use App\Models\AcademyClass;
 use App\Models\Announcement;
+use App\Models\Association;
 use App\Models\Athlete;
+use App\Models\ClothingPackage;
+use App\Models\ClubSetting;
 use App\Models\Coach;
 use App\Models\ParentAthleteLink;
 use App\Models\Sport;
@@ -164,6 +167,69 @@ class AnnouncementController extends Controller
                 ->through($serialize);
         }
 
+        $clubSettings = $club
+            ? ClubSetting::query()->where('club_id', $club->id)->first()
+            : null;
+        $profile = is_array($clubSettings?->profile) ? $clubSettings->profile : [];
+        $customChargeLabel = trim((string) ($profile['custom_charge_label'] ?? '')) ?: 'Προσαρμοσμένη χρέωση';
+
+        $registeredSports = $parentReadOnly
+            ? collect()
+            : $this->clubQuery(Sport::class, $request)
+                ->orderBy('name')
+                ->pluck('name')
+                ->map(fn ($name) => trim((string) $name))
+                ->filter()
+                ->values();
+
+        $classSports = $parentReadOnly
+            ? collect()
+            : $this->clubQuery(AcademyClass::class, $request)
+                ->whereNotNull('sport')
+                ->where('sport', '!=', '')
+                ->distinct()
+                ->orderBy('sport')
+                ->pluck('sport')
+                ->map(fn ($name) => trim((string) $name))
+                ->filter();
+
+        $sports = $registeredSports
+            ->merge($classSports)
+            ->unique(fn ($name) => mb_strtolower($name))
+            ->sort(fn ($a, $b) => strcasecmp($a, $b))
+            ->values();
+
+        $associations = $parentReadOnly
+            ? []
+            : $this->clubQuery(Association::class, $request)
+                ->orderBy('name')
+                ->get(['id', 'name', 'meta'])
+                ->filter(fn (Association $a) => (bool) ($a->meta['active'] ?? true))
+                ->map(fn (Association $a) => trim((string) $a->name))
+                ->filter()
+                ->unique(fn ($name) => mb_strtolower($name))
+                ->sort(fn ($a, $b) => strcasecmp($a, $b))
+                ->values()
+                ->all();
+
+        $athleteAssociations = $parentReadOnly
+            ? []
+            : $this->clubQuery(Athlete::class, $request)
+                ->where('status', '!=', 'inactive')
+                ->get(['meta'])
+                ->map(fn (Athlete $a) => trim((string) ($a->meta['club_name'] ?? $a->meta['clubName'] ?? '')))
+                ->filter()
+                ->unique(fn ($name) => mb_strtolower($name))
+                ->values()
+                ->all();
+
+        $associationOptions = collect($associations)
+            ->merge($athleteAssociations)
+            ->unique(fn ($name) => mb_strtolower($name))
+            ->sort(fn ($a, $b) => strcasecmp($a, $b))
+            ->values()
+            ->all();
+
         return Inertia::render('Admin/Announcements/Index', [
             'items' => $items,
             'classes' => $parentReadOnly
@@ -171,12 +237,19 @@ class AnnouncementController extends Controller
                 : $this->clubQuery(AcademyClass::class, $request)
                     ->orderBy('name')
                     ->get(['id', 'name', 'sport']),
-            'sports' => $parentReadOnly
+            'sports' => $sports,
+            'associations' => $associationOptions,
+            'clothingPackages' => $parentReadOnly
                 ? []
-                : $this->clubQuery(Sport::class, $request)
+                : $this->clubQuery(ClothingPackage::class, $request)
                     ->orderBy('name')
-                    ->pluck('name')
+                    ->get(['id', 'name'])
+                    ->map(fn (ClothingPackage $p) => [
+                        'id' => $p->id,
+                        'name' => $p->name,
+                    ])
                     ->values(),
+            'customChargeLabel' => $customChargeLabel,
             'audienceOptions' => $parentReadOnly ? [] : $this->audiencePickerOptions($request),
             'clubName' => $clubName,
             'parentReadOnly' => $parentReadOnly,
@@ -496,6 +569,9 @@ class AnnouncementController extends Controller
             'staff_ids' => ['nullable', 'array'],
             'staff_ids.*' => ['uuid'],
             'sport' => ['nullable', 'string', 'max:120'],
+            'association' => ['nullable', 'string', 'max:160'],
+            'custom_charge_filter' => ['nullable', 'string', 'in:yes,no'],
+            'clothing_package_id' => ['nullable', 'string', 'max:64'],
             'publish' => ['boolean'],
             'send_email' => ['boolean'],
             'send_sms' => ['boolean'],
@@ -554,6 +630,9 @@ class AnnouncementController extends Controller
             'roles' => array_values($data['roles'] ?? []),
             'class_ids' => array_values($data['class_ids'] ?? []),
             'sport' => trim((string) ($data['sport'] ?? '')),
+            'association' => trim((string) ($data['association'] ?? '')),
+            'custom_charge_filter' => trim((string) ($data['custom_charge_filter'] ?? '')),
+            'clothing_package_id' => trim((string) ($data['clothing_package_id'] ?? '')),
             'parent_ids' => array_values($data['parent_ids'] ?? []),
             'coach_ids' => array_values($data['coach_ids'] ?? []),
             'athlete_ids' => array_values($data['athlete_ids'] ?? []),
@@ -613,10 +692,18 @@ class AnnouncementController extends Controller
             ->orderBy('last_name')
             ->orderBy('first_name')
             ->limit(5_000)
-            ->get(['id', 'first_name', 'last_name', 'sport', 'email'])
+            ->get(['id', 'first_name', 'last_name', 'sport', 'email', 'meta'])
             ->map(function (Athlete $a) {
                 $classNames = $a->classes->pluck('name')->filter()->implode(', ');
                 $sport = (string) ($a->sport ?: $a->classes->pluck('sport')->filter()->first() ?: '');
+                $meta = is_array($a->meta) ? $a->meta : [];
+                $clothingIds = [];
+                foreach ((array) ($meta['clothing_package_ids'] ?? []) as $rawId) {
+                    $id = is_string($rawId) ? trim($rawId) : '';
+                    if ($id !== '') {
+                        $clothingIds[] = $id;
+                    }
+                }
 
                 return [
                     'id' => $a->id,
@@ -624,6 +711,9 @@ class AnnouncementController extends Controller
                     'hint' => trim(implode(' · ', array_filter([$classNames, $sport]))),
                     'sport' => $sport,
                     'class_ids' => $a->classes->pluck('id')->values()->all(),
+                    'club_name' => trim((string) ($meta['club_name'] ?? $meta['clubName'] ?? '')),
+                    'custom_charge' => (bool) ($meta['custom_charge'] ?? false),
+                    'clothing_package_ids' => array_values(array_unique($clothingIds)),
                 ];
             })
             ->values()
@@ -824,15 +914,24 @@ class AnnouncementController extends Controller
     }
 
     /**
-     * @param  array{class_ids?: list<string>, sport?: string}  $audience
+     * @param  array{
+     *     class_ids?: list<string>,
+     *     sport?: string,
+     *     association?: string,
+     *     custom_charge_filter?: string,
+     *     clothing_package_id?: string
+     * }  $audience
      * @return Builder<Athlete>
      */
     private function scopedAthletes(Request $request, array $audience)
     {
         $classIds = array_values($audience['class_ids'] ?? []);
         $sport = trim((string) ($audience['sport'] ?? ''));
+        $association = trim((string) ($audience['association'] ?? ''));
+        $customChargeFilter = trim((string) ($audience['custom_charge_filter'] ?? ''));
+        $clothingPackageId = trim((string) ($audience['clothing_package_id'] ?? ''));
 
-        return $this->clubQuery(Athlete::class, $request)
+        $query = $this->clubQuery(Athlete::class, $request)
             ->where('status', '!=', 'inactive')
             ->when($sport !== '', function ($q) use ($sport) {
                 $q->where(function ($w) use ($sport) {
@@ -842,7 +941,48 @@ class AnnouncementController extends Controller
             })
             ->when($classIds !== [], function ($q) use ($classIds) {
                 $q->whereHas('classes', fn ($c) => $c->whereIn('academy_classes.id', $classIds));
+            })
+            ->when($association !== '', function ($q) use ($association) {
+                $q->where(function ($w) use ($association) {
+                    $w->where('meta->club_name', $association)
+                        ->orWhere('meta->clubName', $association);
+                });
+            })
+            ->when($customChargeFilter === 'yes', fn ($q) => $q->where('meta->custom_charge', true))
+            ->when($customChargeFilter === 'no', function ($q) {
+                $q->where(function ($w) {
+                    $w->whereNull('meta->custom_charge')
+                        ->orWhere('meta->custom_charge', false)
+                        ->orWhere('meta->custom_charge', '0');
+                });
             });
+
+        if ($clothingPackageId === '') {
+            return $query;
+        }
+
+        // Clothing packages live in JSON meta arrays; filter in PHP after fetch is safer across DBs.
+        $ids = $query->get(['id', 'meta'])
+            ->filter(function (Athlete $athlete) use ($clothingPackageId) {
+                $meta = is_array($athlete->meta) ? $athlete->meta : [];
+                $ids = [];
+                foreach ((array) ($meta['clothing_package_ids'] ?? []) as $rawId) {
+                    $id = is_string($rawId) ? trim($rawId) : '';
+                    if ($id !== '') {
+                        $ids[] = $id;
+                    }
+                }
+
+                if ($clothingPackageId === '__none__') {
+                    return $ids === [];
+                }
+
+                return in_array($clothingPackageId, $ids, true);
+            })
+            ->pluck('id')
+            ->all();
+
+        return $this->clubQuery(Athlete::class, $request)->whereIn('id', $ids === [] ? ['__none__'] : $ids);
     }
 
     private function resolveNotifyEmail(Athlete $athlete): ?string
