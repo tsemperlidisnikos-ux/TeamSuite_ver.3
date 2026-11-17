@@ -540,7 +540,7 @@ export default function ClubResourcePage({
             )}
 
             {isWarehouse && (
-                <div className="mb-4 flex flex-wrap gap-2">
+                <div className="mb-4 flex flex-wrap items-center gap-4">
                     <input
                         className="min-w-[180px] flex-1 rounded-md border border-ts-border bg-ts-surface px-3 py-1.5 text-sm text-ts-fg"
                         placeholder={searchPlaceholder}
