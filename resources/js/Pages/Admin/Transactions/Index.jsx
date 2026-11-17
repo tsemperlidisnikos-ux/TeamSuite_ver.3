@@ -80,6 +80,7 @@ export default function Index({
     monthRows = [],
     balance,
     sports = [],
+    receiptSeries = [],
     seasonStart,
     seasonLabel,
     filters,
@@ -97,6 +98,12 @@ export default function Index({
         () => (receiptTx ? draftFromTransaction(receiptTx, selected) : null),
         [receiptTx, selected],
     );
+    const yearOptions = useMemo(() => {
+        const current = new Date().getFullYear();
+        return [current - 1, current, current + 1, current + 2];
+    }, []);
+
+    const defaultSeries = receiptSeries.find((row) => !row.blocked) || receiptSeries[0] || null;
 
     const form = useForm({
         athlete_id: selected?.party_type === 'member' ? '' : selected?.id || '',
@@ -106,10 +113,19 @@ export default function Index({
         day: now.getDate(),
         month: now.getMonth() + 1,
         year: now.getFullYear(),
-        payment_method: 'cash',
+        payment_method: '',
+        receipt_series: '',
         receipt_number: '',
         comments: '',
     });
+
+    const suggestReceipt = (seriesName) => {
+        const row = receiptSeries.find((item) => item.series === seriesName);
+        if (!row || row.blocked || row.next == null) {
+            return { series: seriesName || '', number: '' };
+        }
+        return { series: row.series, number: String(row.next) };
+    };
 
     const apply = (patch) => {
         router.get(
@@ -333,7 +349,7 @@ export default function Index({
 
                     <Panel title="Νέα κίνηση">
                         <form
-                            className="space-y-3"
+                            className="space-y-4"
                             onSubmit={(e) => {
                                 e.preventDefault();
                                 if (!selected?.id) return;
@@ -351,6 +367,8 @@ export default function Index({
                                                 ...form.data,
                                                 ...payload,
                                                 amount: '',
+                                                payment_method: '',
+                                                receipt_series: '',
                                                 receipt_number: '',
                                                 comments: '',
                                                 type: 'charge',
@@ -360,36 +378,61 @@ export default function Index({
                                 );
                             }}
                         >
-                            <label className="block text-xs text-ts-muted">
-                                Ονοματεπώνυμο
-                                <input
-                                    className={`${field} mt-1 text-ts-fg-soft`}
-                                    readOnly
-                                    disabled
-                                    value={
-                                        selected
-                                            ? `${selected.last_name} ${selected.first_name}`
-                                            : ''
-                                    }
-                                    placeholder={
-                                        isMember
-                                            ? 'Επιλέξτε μέλος από τη λίστα'
-                                            : 'Επιλέξτε αθλητή από τη λίστα'
-                                    }
-                                />
-                            </label>
-                            <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="grid gap-4 sm:grid-cols-2">
+                                <label className="block text-xs text-ts-muted">
+                                    Ονοματεπώνυμο
+                                    <input
+                                        className={`${field} mt-1 text-ts-fg-soft`}
+                                        readOnly
+                                        disabled
+                                        value={
+                                            selected
+                                                ? `${selected.last_name} ${selected.first_name}`
+                                                : ''
+                                        }
+                                        placeholder={
+                                            isMember
+                                                ? 'Επιλέξτε μέλος από τη λίστα'
+                                                : 'Επιλέξτε αθλητή από τη λίστα'
+                                        }
+                                    />
+                                </label>
                                 <label className="block text-xs text-ts-muted">
                                     Τύπος κίνησης
                                     <select
                                         className={`${field} mt-1`}
                                         value={form.data.type}
-                                        onChange={(e) => form.setData('type', e.target.value)}
+                                        onChange={(e) => {
+                                            const type = e.target.value;
+                                            if (type !== 'payment') {
+                                                form.setData({
+                                                    ...form.data,
+                                                    type,
+                                                    receipt_series: '',
+                                                    receipt_number: '',
+                                                    payment_method: '',
+                                                });
+                                                return;
+                                            }
+                                            const suggested = suggestReceipt(
+                                                form.data.receipt_series || defaultSeries?.series || '',
+                                            );
+                                            form.setData({
+                                                ...form.data,
+                                                type,
+                                                receipt_series: suggested.series,
+                                                receipt_number:
+                                                    suggested.number || form.data.receipt_number,
+                                            });
+                                        }}
                                     >
                                         <option value="charge">Χρέωση</option>
                                         <option value="payment">Πληρωμή</option>
                                     </select>
                                 </label>
+                            </div>
+
+                            <div className="grid gap-4 sm:grid-cols-2">
                                 <label className="block text-xs text-ts-muted">
                                     Ποσό (€)
                                     <input
@@ -402,81 +445,160 @@ export default function Index({
                                         onChange={(e) => form.setData('amount', e.target.value)}
                                     />
                                 </label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    <label className="block text-xs text-ts-muted">
+                                        Ημέρα
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            max={31}
+                                            className={`${field} mt-1`}
+                                            value={form.data.day}
+                                            onChange={(e) =>
+                                                form.setData('day', Number(e.target.value))
+                                            }
+                                        />
+                                    </label>
+                                    <label className="block text-xs text-ts-muted">
+                                        Μήνας
+                                        <select
+                                            className={`${field} mt-1`}
+                                            value={form.data.month}
+                                            onChange={(e) =>
+                                                form.setData('month', Number(e.target.value))
+                                            }
+                                        >
+                                            {MONTHS.map(([v, l]) => (
+                                                <option key={v} value={v}>
+                                                    {l}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </label>
+                                    <label className="block text-xs text-ts-muted">
+                                        Έτος
+                                        <select
+                                            className={`${field} mt-1`}
+                                            value={form.data.year}
+                                            onChange={(e) =>
+                                                form.setData('year', Number(e.target.value))
+                                            }
+                                        >
+                                            {yearOptions.map((y) => (
+                                                <option key={y} value={y}>
+                                                    {y}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </label>
+                                </div>
                             </div>
-                            <div className="grid grid-cols-3 gap-2">
+
+                            <div className="grid gap-4 sm:grid-cols-[minmax(4.5rem,0.7fr)_minmax(0,1.1fr)_minmax(0,1.2fr)]">
                                 <label className="block text-xs text-ts-muted">
-                                    Ημέρα
+                                    Σειρά
+                                    {receiptSeries.length > 1 ? (
+                                        <select
+                                            className={`${field} mt-1`}
+                                            value={
+                                                form.data.type === 'charge'
+                                                    ? ''
+                                                    : form.data.receipt_series
+                                            }
+                                            disabled={form.data.type === 'charge'}
+                                            onChange={(e) => {
+                                                if (form.data.type === 'charge') {
+                                                    return;
+                                                }
+                                                const suggested = suggestReceipt(e.target.value);
+                                                form.setData({
+                                                    ...form.data,
+                                                    receipt_series: suggested.series,
+                                                    receipt_number: suggested.number,
+                                                });
+                                            }}
+                                        >
+                                            <option value="">—</option>
+                                            {receiptSeries.map((row) => (
+                                                <option
+                                                    key={row.id}
+                                                    value={row.series}
+                                                    disabled={row.blocked}
+                                                >
+                                                    {row.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    ) : (
+                                        <input
+                                            className={`${field} mt-1`}
+                                            value={
+                                                form.data.type === 'charge'
+                                                    ? ''
+                                                    : form.data.receipt_series ||
+                                                      defaultSeries?.series ||
+                                                      ''
+                                            }
+                                            disabled={form.data.type === 'charge'}
+                                            readOnly={
+                                                form.data.type === 'charge' ||
+                                                receiptSeries.length <= 1
+                                            }
+                                            onChange={(e) => {
+                                                if (form.data.type === 'charge') {
+                                                    return;
+                                                }
+                                                form.setData('receipt_series', e.target.value);
+                                            }}
+                                        />
+                                    )}
+                                </label>
+                                <label className="block text-xs text-ts-muted">
+                                    Αρ. Απόδειξης
                                     <input
-                                        type="number"
-                                        min={1}
-                                        max={31}
                                         className={`${field} mt-1`}
-                                        value={form.data.day}
-                                        onChange={(e) => form.setData('day', Number(e.target.value))}
+                                        value={
+                                            form.data.type === 'charge'
+                                                ? ''
+                                                : form.data.receipt_number
+                                        }
+                                        disabled={form.data.type === 'charge'}
+                                        readOnly={form.data.type === 'charge'}
+                                        onChange={(e) => {
+                                            if (form.data.type === 'charge') {
+                                                return;
+                                            }
+                                            form.setData('receipt_number', e.target.value);
+                                        }}
                                     />
                                 </label>
                                 <label className="block text-xs text-ts-muted">
-                                    Μήνας
+                                    Τρόπος πληρωμής
                                     <select
                                         className={`${field} mt-1`}
-                                        value={form.data.month}
-                                        onChange={(e) => form.setData('month', Number(e.target.value))}
+                                        value={
+                                            form.data.type === 'charge'
+                                                ? ''
+                                                : form.data.payment_method
+                                        }
+                                        disabled={form.data.type === 'charge'}
+                                        onChange={(e) => {
+                                            if (form.data.type === 'charge') {
+                                                return;
+                                            }
+                                            form.setData('payment_method', e.target.value);
+                                        }}
                                     >
-                                        {MONTHS.map(([v, l]) => (
-                                            <option key={v} value={v}>
-                                                {l}
-                                            </option>
-                                        ))}
+                                        <option value="">—</option>
+                                        <option value="cash">Μετρητά</option>
+                                        <option value="card">Κάρτα</option>
+                                        <option value="transfer">Μεταφορά</option>
+                                        <option value="online">Online</option>
+                                        <option value="other">Άλλο</option>
                                     </select>
                                 </label>
-                                <label className="block text-xs text-ts-muted">
-                                    Έτος
-                                    <input
-                                        type="number"
-                                        min={2000}
-                                        max={2100}
-                                        className={`${field} mt-1`}
-                                        value={form.data.year}
-                                        onChange={(e) => form.setData('year', Number(e.target.value))}
-                                    />
-                                </label>
                             </div>
-                            <label className="block text-xs text-ts-muted">
-                                Αρ. Απόδειξης
-                                <input
-                                    className={`${field} mt-1`}
-                                    value={form.data.type === 'charge' ? '' : form.data.receipt_number}
-                                    disabled={form.data.type === 'charge'}
-                                    readOnly={form.data.type === 'charge'}
-                                    onChange={(e) => {
-                                        if (form.data.type === 'charge') {
-                                            return;
-                                        }
-                                        form.setData('receipt_number', e.target.value);
-                                    }}
-                                />
-                            </label>
-                            <label className="block text-xs text-ts-muted">
-                                Τρόπος πληρωμής
-                                <select
-                                    className={`${field} mt-1`}
-                                    value={form.data.type === 'charge' ? '' : form.data.payment_method}
-                                    disabled={form.data.type === 'charge'}
-                                    onChange={(e) => {
-                                        if (form.data.type === 'charge') {
-                                            return;
-                                        }
-                                        form.setData('payment_method', e.target.value);
-                                    }}
-                                >
-                                    <option value="">—</option>
-                                    <option value="cash">Μετρητά</option>
-                                    <option value="card">Κάρτα</option>
-                                    <option value="transfer">Μεταφορά</option>
-                                    <option value="online">Online</option>
-                                    <option value="other">Άλλο</option>
-                                </select>
-                            </label>
+
                             <label className="block text-xs text-ts-muted">
                                 Σχόλια
                                 <textarea
@@ -490,10 +612,10 @@ export default function Index({
                                     }
                                 />
                             </label>
-                            <div className="flex justify-end">
+                            <div className="flex justify-center pt-1">
                                 <button
                                     type="submit"
-                                    className={btnPrimary}
+                                    className={`${btnPrimary} min-w-[10rem]`}
                                     disabled={!selected || form.processing}
                                 >
                                     Αποθήκευση

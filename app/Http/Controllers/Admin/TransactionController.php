@@ -10,6 +10,7 @@ use App\Models\Attendance;
 use App\Models\Club;
 use App\Models\ClubMember;
 use App\Models\ClubSeason;
+use App\Models\ReceiptSeries;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -234,6 +235,27 @@ class TransactionController extends Controller
             ? Storage::disk('public')->url($club->logo_path)
             : null;
 
+        $receiptSeries = $this->clubQuery(ReceiptSeries::class, $request)
+            ->where('is_active', true)
+            ->orderBy('series')
+            ->get(['id', 'series', 'range_from', 'range_to', 'next_number'])
+            ->map(function (ReceiptSeries $row) {
+                $next = (int) ($row->next_number ?: $row->range_from);
+                $to = (int) $row->range_to;
+                $blocked = $next > $to;
+
+                return [
+                    'id' => $row->id,
+                    'series' => $row->series,
+                    'next' => $blocked ? null : $next,
+                    'blocked' => $blocked,
+                    'label' => $blocked
+                        ? $row->series.' · εξαντλήθηκε'
+                        : $row->series.' · επόμ. '.$next,
+                ];
+            })
+            ->values();
+
         return Inertia::render('Admin/Transactions/Index', [
             'athletes' => $athleteRows,
             'members' => $memberRows,
@@ -243,6 +265,7 @@ class TransactionController extends Controller
             'monthRows' => $monthRows,
             'balance' => $balance,
             'sports' => $sports,
+            'receiptSeries' => $receiptSeries,
             'seasonStart' => $seasonStart,
             'seasonLabel' => $activeSeason?->name ?: sprintf('%d-%d', $seasonStart, $seasonStart + 1),
             'clubName' => $clubName,
@@ -273,6 +296,7 @@ class TransactionController extends Controller
             'month' => 'nullable|integer|min:1|max:12',
             'year' => 'nullable|integer|min:2000|max:2100',
             'payment_method' => 'nullable|in:cash,card,transfer,online,other',
+            'receipt_series' => 'nullable|string|max:40',
             'receipt_number' => 'nullable|string|max:64',
             'comments' => 'nullable|string|max:2000',
         ]);
@@ -293,6 +317,11 @@ class TransactionController extends Controller
         $createdAt = Carbon::createSafe($year, $month, min($day, Carbon::create($year, $month, 1)->daysInMonth), 12, 0, 0)
             ?: now();
 
+        $isPayment = $data['type'] === 'payment';
+        $receiptSeriesName = $isPayment ? trim((string) ($data['receipt_series'] ?? '')) : '';
+        $receiptNumberRaw = $isPayment ? trim((string) ($data['receipt_number'] ?? '')) : '';
+        $receiptSeq = ctype_digit($receiptNumberRaw) ? (int) $receiptNumberRaw : null;
+
         $payload = [
             'id' => (string) Str::uuid(),
             'club_id' => $clubId,
@@ -302,8 +331,10 @@ class TransactionController extends Controller
             'amount' => $data['amount'],
             'month' => $month,
             'year' => $year,
-            'payment_method' => $data['type'] === 'payment' ? ($data['payment_method'] ?? null) : null,
-            'receipt_number' => $data['type'] === 'payment' ? ($data['receipt_number'] ?? null) : null,
+            'payment_method' => $isPayment ? ($data['payment_method'] ?? null) : null,
+            'receipt_number' => $isPayment && $receiptNumberRaw !== '' ? $receiptNumberRaw : null,
+            'receipt_series' => $isPayment && $receiptSeriesName !== '' ? $receiptSeriesName : null,
+            'receipt_seq' => $isPayment ? $receiptSeq : null,
             'comments' => $data['comments'] ?? null,
             'created_at' => $createdAt,
             'updated_at' => $createdAt,
@@ -325,6 +356,20 @@ class TransactionController extends Controller
         }
 
         AthleteTransaction::query()->withoutGlobalScopes()->create($payload);
+
+        if ($isPayment && $receiptSeriesName !== '' && $receiptSeq !== null) {
+            $seriesRow = ReceiptSeries::query()->withoutGlobalScopes()
+                ->where('club_id', $clubId)
+                ->where('series', $receiptSeriesName)
+                ->where('is_active', true)
+                ->first();
+
+            if ($seriesRow && (int) $seriesRow->next_number <= $receiptSeq) {
+                $seriesRow->update([
+                    'next_number' => $receiptSeq + 1,
+                ]);
+            }
+        }
 
         return redirect()
             ->route('admin.transactions.index', $redirect)
