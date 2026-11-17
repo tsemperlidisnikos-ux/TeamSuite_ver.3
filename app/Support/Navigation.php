@@ -35,8 +35,7 @@ final class Navigation
             ['id' => 'documentProtocol', 'label' => 'Πρωτόκολλο Εγγράφων', 'route' => 'admin.protocol.index'],
             ['id' => 'rental', 'label' => 'Ενοικίαση', 'route' => 'admin.rentals.index'],
             ['id' => 'finance', 'label' => 'Οικονομικά', 'route' => 'admin.finance.index'],
-            ['id' => 'associations', 'label' => 'Σωματείο', 'route' => 'admin.associations.index'],
-            // Άθλημα lives under Ρυθμίσεις (?tab=sports), not as a top-level sidebar item.
+            // Σωματείο / Άθλημα live under Ρυθμίσεις (?tab=associations|sports), not as top-level sidebar items.
             ['id' => 'settings', 'label' => 'Ρυθμίσεις', 'route' => 'admin.settings.index'],
         ];
     }
@@ -90,7 +89,6 @@ final class Navigation
                     ['label' => 'Τμήματα', 'route' => 'admin.classes.index', 'module' => 'classes'],
                     ['label' => 'Γονείς', 'route' => 'admin.parents.index', 'module' => 'parents'],
                     ['label' => 'Μέλη', 'route' => 'admin.members.index', 'module' => 'members'],
-                    ['label' => 'Σωματείο', 'route' => 'admin.associations.index', 'module' => 'associations'],
                 ],
             ],
             [

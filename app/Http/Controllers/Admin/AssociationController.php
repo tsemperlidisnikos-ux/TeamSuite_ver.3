@@ -83,7 +83,8 @@ class AssociationController extends ClubResourceController
             'meta' => $this->packMeta($validated),
         ]);
 
-        return $this->redirectToIndex($config['route'], 'Το σωματείο προστέθηκε.');
+        return redirect('/admin/settings?tab=associations')
+            ->with('success', 'Το σωματείο προστέθηκε.');
     }
 
     public function update(Request $request, string $id): RedirectResponse
@@ -99,7 +100,16 @@ class AssociationController extends ClubResourceController
             'meta' => array_merge($record->meta ?? [], $this->packMeta($validated)),
         ])->save();
 
-        return $this->redirectToIndex($config['route'], 'Το σωματείο ενημερώθηκε.');
+        return redirect('/admin/settings?tab=associations')
+            ->with('success', 'Το σωματείο ενημερώθηκε.');
+    }
+
+    public function destroy(Request $request, string $id): RedirectResponse
+    {
+        parent::destroy($request, $id);
+
+        return redirect('/admin/settings?tab=associations')
+            ->with('success', 'Το σωματείο διαγράφηκε.');
     }
 
     /**

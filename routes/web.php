@@ -126,10 +126,14 @@ Route::middleware(['auth', 'verified', 'club', 'club.module'])->group(function (
         'photos' => PhotoController::class,
         'partners' => PartnerController::class,
         'protocol' => ProtocolController::class,
-        'associations' => AssociationController::class,
     ];
 
-    // Άθλημα is managed under Ρυθμίσεις (?tab=sports), not a standalone sidebar page.
+    // Σωματείο / Άθλημα are managed under Ρυθμίσεις, not standalone sidebar pages.
+    Route::redirect('/admin/associations', '/admin/settings?tab=associations')->name('admin.associations.index');
+    Route::post('/admin/associations', [AssociationController::class, 'store'])->name('admin.associations.store');
+    Route::patch('/admin/associations/{id}', [AssociationController::class, 'update'])->name('admin.associations.update');
+    Route::delete('/admin/associations/{id}', [AssociationController::class, 'destroy'])->name('admin.associations.destroy');
+
     Route::redirect('/admin/sports', '/admin/settings?tab=sports')->name('admin.sports.index');
     Route::post('/admin/sports', [SportController::class, 'store'])->name('admin.sports.store');
     Route::patch('/admin/sports/{id}', [SportController::class, 'update'])->name('admin.sports.update');
@@ -249,7 +253,6 @@ Route::middleware(['auth', 'verified', 'club', 'club.module'])->group(function (
         'matches' => '/admin/matches',
         'schedule' => '/admin/schedule',
         'attendance' => '/admin/attendance',
-        'associations' => '/admin/associations',
         'announcements' => '/admin/announcements',
         'prints' => '/admin/prints',
         'photos' => '/admin/photos',
@@ -267,6 +270,7 @@ Route::middleware(['auth', 'verified', 'club', 'club.module'])->group(function (
         Route::redirect('/'.$path, $target);
     }
 
+    Route::redirect('/associations', '/admin/settings?tab=associations');
     Route::redirect('/sports', '/admin/settings?tab=sports');
 
     Route::get('/athletes/{id}', fn (string $id) => redirect('/admin/athletes/'.$id));

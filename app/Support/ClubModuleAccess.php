@@ -32,7 +32,7 @@ final class ClubModuleAccess
         'admin.photos' => 'photos',
         'admin.partners' => 'partnerBusinesses',
         'admin.protocol' => 'documentProtocol',
-        'admin.associations' => 'associations',
+        'admin.associations' => 'settings',
         'admin.sports' => 'settings',
         'admin.parents' => 'parents',
         'admin.calendar' => 'calendar',

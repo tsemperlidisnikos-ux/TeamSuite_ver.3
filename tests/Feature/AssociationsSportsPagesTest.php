@@ -38,16 +38,19 @@ class AssociationsSportsPagesTest extends TestCase
         return compact('club', 'user');
     }
 
-    public function test_associations_index_and_store(): void
+    public function test_associations_lives_under_settings_and_store_works(): void
     {
         ['user' => $user, 'club' => $club] = $this->seedAdmin();
 
         $this->actingAs($user)
             ->get(route('admin.associations.index'))
+            ->assertRedirect('/admin/settings?tab=associations');
+
+        $this->actingAs($user)
+            ->get('/admin/settings?tab=associations')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->component('Admin/Associations/Index')
-                ->where('title', 'Σωματείο')
+                ->component('Admin/Settings/Index')
             );
 
         $this->actingAs($user)
@@ -59,7 +62,7 @@ class AssociationsSportsPagesTest extends TestCase
                 'address' => 'Οδός 1',
                 'active' => '1',
             ])
-            ->assertRedirect(route('admin.associations.index'));
+            ->assertRedirect('/admin/settings?tab=associations');
 
         $association = Association::query()->withoutGlobalScopes()
             ->where('club_id', $club->id)
@@ -102,7 +105,7 @@ class AssociationsSportsPagesTest extends TestCase
 
         $this->actingAs($user)
             ->get('/associations')
-            ->assertRedirect('/admin/associations');
+            ->assertRedirect('/admin/settings?tab=associations');
 
         $this->actingAs($user)
             ->get('/sports')
