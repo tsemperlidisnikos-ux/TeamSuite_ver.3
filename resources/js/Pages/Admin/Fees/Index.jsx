@@ -5,8 +5,79 @@ import { useMemo, useState } from 'react';
 
 const DEFAULT_MONTHS = [9, 10, 11, 12, 1, 2, 3, 4, 5, 6];
 
+const SORT_LABELS = {
+    last_name: 'Επώνυμο',
+    class_names: 'Τμήμα',
+    owed: 'Υπόλοιπο',
+    last_payment_at: 'Τελευταία πληρωμή',
+};
+
 function toggleMonth(list, month) {
     return list.includes(month) ? list.filter((m) => m !== month) : [...list, month];
+}
+
+function SortableTh({ column, label, sortKey, sortDir, onSort }) {
+    const active = sortKey === column;
+    return (
+        <th className="px-3 py-2 text-left">
+            <button
+                type="button"
+                className={`inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide ${
+                    active ? 'text-ts-fg' : 'text-ts-muted hover:text-ts-fg'
+                }`}
+                onClick={() => onSort(column)}
+                aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+            >
+                <span>{label}</span>
+                <span aria-hidden className="text-[0.65rem] opacity-80">
+                    {active ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}
+                </span>
+            </button>
+        </th>
+    );
+}
+
+function compareFeeRows(a, b, sortKey, sortDir) {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    let cmp = 0;
+
+    if (sortKey === 'owed') {
+        cmp = Number(a.owed || 0) - Number(b.owed || 0);
+    } else if (sortKey === 'last_payment_at') {
+        const aTime = a.last_payment_at ? Date.parse(a.last_payment_at) : NaN;
+        const bTime = b.last_payment_at ? Date.parse(b.last_payment_at) : NaN;
+        const aMissing = Number.isNaN(aTime);
+        const bMissing = Number.isNaN(bTime);
+        if (aMissing && bMissing) {
+            cmp = 0;
+        } else if (aMissing) {
+            cmp = 1;
+        } else if (bMissing) {
+            cmp = -1;
+        } else {
+            cmp = aTime - bTime;
+        }
+    } else if (sortKey === 'class_names') {
+        cmp = String(a.class_names || '').localeCompare(String(b.class_names || ''), 'el', {
+            sensitivity: 'base',
+        });
+    } else {
+        cmp = `${a.last_name || ''} ${a.first_name || ''}`.localeCompare(
+            `${b.last_name || ''} ${b.first_name || ''}`,
+            'el',
+            { sensitivity: 'base' },
+        );
+    }
+
+    if (cmp === 0 && sortKey !== 'last_name') {
+        cmp = `${a.last_name || ''} ${a.first_name || ''}`.localeCompare(
+            `${b.last_name || ''} ${b.first_name || ''}`,
+            'el',
+            { sensitivity: 'base' },
+        );
+    }
+
+    return cmp * dir;
 }
 
 function emptyWizard(seasons, monthLabels) {
@@ -83,6 +154,8 @@ export default function Index({
     const [panel, setPanel] = useState(null);
     const [athleteSearch, setAthleteSearch] = useState('');
     const [selectedTemplateIds, setSelectedTemplateIds] = useState([]);
+    const [sortKey, setSortKey] = useState('last_name');
+    const [sortDir, setSortDir] = useState('asc');
 
     const wizard = useForm(emptyWizard(seasons, monthLabels));
 
@@ -103,7 +176,21 @@ export default function Index({
         });
     };
 
-    const allIds = useMemo(() => rows.map((r) => r.id), [rows]);
+    const toggleSort = (key) => {
+        if (sortKey === key) {
+            setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+            return;
+        }
+        setSortKey(key);
+        setSortDir(key === 'owed' || key === 'last_payment_at' ? 'desc' : 'asc');
+    };
+
+    const sortedRows = useMemo(
+        () => [...(rows || [])].sort((a, b) => compareFeeRows(a, b, sortKey, sortDir)),
+        [rows, sortKey, sortDir],
+    );
+
+    const allIds = useMemo(() => sortedRows.map((r) => r.id), [sortedRows]);
     const allSelected = selected.length > 0 && selected.length === allIds.length;
 
     const toggleAll = () => setSelected(allSelected ? [] : allIds);
@@ -375,17 +462,41 @@ export default function Index({
                             <th className="w-8 px-3 py-2">
                                 <input type="checkbox" checked={allSelected} onChange={toggleAll} />
                             </th>
-                            <th className="px-3 py-2 text-left">Επώνυμο</th>
+                            <SortableTh
+                                column="last_name"
+                                label={SORT_LABELS.last_name}
+                                sortKey={sortKey}
+                                sortDir={sortDir}
+                                onSort={toggleSort}
+                            />
                             <th className="px-3 py-2 text-left">Όνομα</th>
-                            <th className="px-3 py-2 text-left">Τμήμα</th>
+                            <SortableTh
+                                column="class_names"
+                                label={SORT_LABELS.class_names}
+                                sortKey={sortKey}
+                                sortDir={sortDir}
+                                onSort={toggleSort}
+                            />
                             <th className="px-3 py-2 text-left">Μηνιαία συνδρομή</th>
-                            <th className="px-3 py-2 text-left">Υπόλοιπο</th>
-                            <th className="px-3 py-2 text-left">Τελευταία πληρωμή</th>
+                            <SortableTh
+                                column="owed"
+                                label={SORT_LABELS.owed}
+                                sortKey={sortKey}
+                                sortDir={sortDir}
+                                onSort={toggleSort}
+                            />
+                            <SortableTh
+                                column="last_payment_at"
+                                label={SORT_LABELS.last_payment_at}
+                                sortKey={sortKey}
+                                sortDir={sortDir}
+                                onSort={toggleSort}
+                            />
                             <th className="px-3 py-2 text-right" />
                         </tr>
                     </thead>
                     <tbody>
-                        {rows.map((r) => (
+                        {sortedRows.map((r) => (
                             <tr key={r.id} className="border-t border-ts-border">
                                 <td className="px-3 py-2">
                                     <input
