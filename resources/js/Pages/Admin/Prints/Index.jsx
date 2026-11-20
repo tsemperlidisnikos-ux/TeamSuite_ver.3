@@ -113,9 +113,9 @@ function TriState({ value, onChange, yesLabel = 'Ναι' }) {
 
 function OpNumber({ op, value, onOp, onValue, placeholder, min, step, ops = COMPARE_OPS }) {
     return (
-        <div className="flex gap-2">
+        <div className="flex items-stretch gap-2">
             <select
-                className="w-auto rounded-md border border-ts-border bg-ts-bg px-2 py-1.5 text-sm"
+                className="h-10 min-w-[3.75rem] shrink-0 rounded-md border border-ts-border bg-ts-bg px-2.5 text-base leading-none tracking-wide text-ts-fg"
                 value={op}
                 onChange={(e) => onOp(e.target.value)}
                 aria-label="Συντελεστής"
@@ -128,7 +128,7 @@ function OpNumber({ op, value, onOp, onValue, placeholder, min, step, ops = COMP
             </select>
             <input
                 type="number"
-                className="w-full rounded-md border border-ts-border bg-ts-bg px-2 py-1.5 text-sm"
+                className="h-10 w-full rounded-md border border-ts-border bg-ts-bg px-2.5 text-sm text-ts-fg"
                 value={value}
                 min={min}
                 step={step}
