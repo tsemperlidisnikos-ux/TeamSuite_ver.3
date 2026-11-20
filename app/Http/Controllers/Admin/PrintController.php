@@ -181,6 +181,7 @@ class PrintController extends Controller
                 'has_registration_card' => $registrationNumber !== '',
                 'uniform_received' => (bool) ($meta['uniform_received'] ?? false),
                 'uniform_size' => trim((string) ($meta['uniform_size'] ?? $meta['uniformSize'] ?? '')),
+                'upgraded_package_received' => (bool) ($meta['upgraded_package_received'] ?? false),
                 'has_attendance' => ($att['present'] ?? 0) > 0,
                 'attendance_present_count' => (int) ($att['present'] ?? 0),
                 'attendance_absent_count' => (int) ($att['absent'] ?? 0),

@@ -80,6 +80,7 @@ class AthletesRegistryPrintTest extends TestCase
                 'registration_number' => 'Δ-100',
                 'uniform_received' => true,
                 'uniform_size' => 'Medium',
+                'upgraded_package_received' => true,
             ],
         ]);
 
@@ -113,6 +114,7 @@ class AthletesRegistryPrintTest extends TestCase
                 ->where('athletes.0.registration_number', 'Δ-100')
                 ->where('athletes.0.uniform_received', true)
                 ->where('athletes.0.uniform_size', 'Medium')
+                ->where('athletes.0.upgraded_package_received', true)
                 ->where('athletes.0.has_attendance', true)
                 ->where('athletes.0.clothing_package_ids.0', $package->id)
             );

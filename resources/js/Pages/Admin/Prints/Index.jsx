@@ -312,6 +312,9 @@ export default function Index({
     const [uniformReceived, setUniformReceived] = useState(
         () => query.get('uniform_received') || '',
     );
+    const [upgradedPackageReceived, setUpgradedPackageReceived] = useState(
+        () => query.get('upgraded_package_received') || '',
+    );
     const [uniformSize, setUniformSize] = useState(
         () => query.get('uniform_size') || '',
     );
@@ -575,6 +578,9 @@ export default function Index({
                     return false;
                 }
                 if (!matchTri(uniformReceived, a.uniform_received)) return false;
+                if (!matchTri(upgradedPackageReceived, a.upgraded_package_received)) {
+                    return false;
+                }
                 if (uniformSize && (a.uniform_size || '') !== uniformSize) return false;
                 if (dateFrom && a.enrolled_at && a.enrolled_at < dateFrom) return false;
                 if (dateTo && a.enrolled_at && a.enrolled_at > dateTo) return false;
@@ -700,6 +706,7 @@ export default function Index({
         trainingPresence,
         trainingPresenceOp,
         uniformReceived,
+        upgradedPackageReceived,
         uniformSize,
         dateFrom,
         dateTo,
@@ -940,6 +947,7 @@ export default function Index({
             params.set('training_presence', trainingPresence);
             params.set('training_presence_op', trainingPresenceOp);
             params.set('uniform_received', uniformReceived);
+            params.set('upgraded_package_received', upgradedPackageReceived);
             params.set('uniform_size', uniformSize);
             params.set('birth_year_op', birthYearOp);
             params.set('birth_year', birthYear);
@@ -1624,6 +1632,12 @@ export default function Index({
                         </FilterRow>
                         <FilterRow label="Παραλαβή στολής">
                             <TriState value={uniformReceived} onChange={setUniformReceived} />
+                        </FilterRow>
+                        <FilterRow label="Παραλαβή αναβαθμισμένου πακέτου">
+                            <TriState
+                                value={upgradedPackageReceived}
+                                onChange={setUpgradedPackageReceived}
+                            />
                         </FilterRow>
                         <FilterRow label="Μέγεθος Στολής">
                             <select
